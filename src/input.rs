@@ -55,9 +55,6 @@ impl Input {
         self.key_states.insert(b, is_down);
     }
 
-    pub fn push(&mut self, i:i32){
-        print!("{}",i);
-    }
     pub fn consume_keys(&mut self, event: Event) {
         match event {
             Event::KeyDown { keycode, .. } => self.set_button(keycode, true),

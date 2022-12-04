@@ -1,14 +1,13 @@
 mod cpu;
 mod emulator;
+mod input;
 mod mem;
 mod video;
-mod input;
 
 extern crate sdl2;
 
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use std::collections::HashMap;
+
 use std::time::Duration;
 
 pub fn main() {
@@ -35,18 +34,16 @@ pub fn main() {
     canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-   
-
     let mut input = input::Input::new();
-  
+
     'running: loop {
         // Start playback
         for event in event_pump.poll_iter() {
-            if let Event::Quit{ .. } = event { 
+            if let Event::Quit { .. } = event {
                 break 'running;
-             }
-             input.consume_keys(event);
-             break;
+            }
+            input.consume_keys(event);
+            break;
         }
         emulator.tick(&input);
         canvas.clear();

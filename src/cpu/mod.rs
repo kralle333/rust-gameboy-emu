@@ -1,6 +1,11 @@
+#[cfg(test)]
+mod cpu_test;
 mod execute;
 mod execute_cb;
+mod helpers_cb;
 mod helpers;
+
+use std::ops::{Shl, Shr};
 
 use crate::mem;
 
@@ -15,6 +20,11 @@ pub struct Cpu {
     SP: u16,
     PC: u16,
 
+    IME: bool,
+    HALT: bool,
+    interrupts: u16,
+    DI: bool,
+    EI: bool,
     clock_m: u8,
     clock_t: u8,
 }
@@ -29,6 +39,13 @@ pub enum Register {
     F,
     H,
     L,
+}
+
+enum Flag {
+    Z = 0x80,
+    N = 0x40,
+    H = 0x20,
+    C = 0x10,
 }
 
 enum Opcode {
@@ -56,6 +73,11 @@ impl Cpu {
             PC: 0x100,
             clock_m: 0,
             clock_t: 1,
+            IME: false,
+            HALT: false,
+            interrupts: 0,
+            DI: false,
+            EI: false,
         }
     }
 
@@ -64,43 +86,43 @@ impl Cpu {
     }
 
     fn get_a(&self) -> u8 {
-        (self.AF & 0x00ff) as u8
+        Self::get_upper(self.AF)
     }
     fn get_f(&self) -> u8 {
-        (self.AF & 0xff00) as u8
+        Self::get_lower(self.AF)
     }
     fn get_b(&self) -> u8 {
-        (self.BC & 0xff00) as u8
+        Self::get_upper(self.BC)
     }
     fn get_c(&self) -> u8 {
-        (self.BC & 0x00ff) as u8
+        Self::get_lower(self.BC)
     }
     fn get_d(&self) -> u8 {
-        (self.DE & 0xff00) as u8
+        Self::get_upper(self.DE)
     }
     fn get_e(&self) -> u8 {
-        (self.DE & 0x00ff) as u8
+        Self::get_lower(self.DE)
     }
     fn get_h(&self) -> u8 {
-        (self.HL & 0xff00) as u8
+        Self::get_upper(self.HL)
     }
     fn get_l(&self) -> u8 {
-        (self.HL & 0x00ff) as u8
+        Self::get_lower(self.HL)
     }
 
-    fn set(&mut self, register: Register, value: u8) {
+    fn set_reg(&mut self, register: Register, val: u8) {
         match register {
-            Register::A => self.set_a(value),
-            Register::B => self.set_b(value),
-            Register::C => self.set_c(value),
-            Register::D => self.set_d(value),
-            Register::E => self.set_e(value),
-            Register::F => self.set_f(value),
-            Register::H => self.set_h(value),
-            Register::L => self.set_l(value),
+            Register::A => self.set_a(val),
+            Register::B => self.set_b(val),
+            Register::C => self.set_c(val),
+            Register::D => self.set_d(val),
+            Register::E => self.set_e(val),
+            Register::F => self.set_f(val),
+            Register::H => self.set_h(val),
+            Register::L => self.set_l(val),
         }
     }
-    fn get(&self, register: Register) -> u8 {
+    fn get_reg(&self, register: Register) -> u8 {
         match register {
             Register::A => self.get_a(),
             Register::B => self.get_b(),
@@ -112,44 +134,57 @@ impl Cpu {
             Register::L => self.get_l(),
         }
     }
-    
+    fn get_upper(reg: u16) -> u8 {
+        (reg & 0xff00).shr(8) as u8
+    }
+    fn get_lower(reg: u16) -> u8 {
+        (reg & 0x00ff) as u8
+    }
+    fn set_upper(reg: u16, val: u8) -> u16 {
+        (reg & 0x00ff) | (val as u16).shl(8)
+    }
+    fn set_lower(reg: u16, val: u8) -> u16 {
+        (reg & 0xff00) | (val as u16)
+    }
+    fn set_a(&mut self, val: u8) {
+        self.AF = Self::set_upper(self.AF, val);
+    }
+    fn set_f(&mut self, val: u8) {
+        self.AF = Self::set_lower(self.AF, val);
+    }
+    fn set_b(&mut self, val: u8) {
+        self.BC = Self::set_upper(self.BC, val);
+    }
+    fn set_c(&mut self, val: u8) {
+        self.BC = Self::set_lower(self.BC, val);
+    }
+    fn set_d(&mut self, val: u8) {
+        self.DE = Self::set_upper(self.DE, val);
+    }
+    fn set_e(&mut self, val: u8) {
+        self.DE = Self::set_lower(self.DE, val);
+    }
+    fn set_h(&mut self, val: u8) {
+        self.HL = Self::set_upper(self.HL, val);
+    }
+    fn set_l(&mut self, val: u8) {
+        self.HL = Self::set_lower(self.HL, val);
+    }
 
-    fn set_a(&mut self, value: u8) {
-        self.AF = (self.AF & 0x00ff) & value as u16
+    fn set_flag(&mut self, flag: Flag, val: bool) {
+        if val {
+            self.AF = self.AF | (flag as u16);
+        } else {
+            self.AF = self.AF & !(flag as u16);
+        }
     }
-    fn set_f(&mut self, value: u8) {
-        self.AF = (self.AF & 0xff00) & value as u16
-    }
-    fn set_b(&mut self, value: u8) {
-        self.BC = (self.BC & 0x00ff) & value as u16
-    }
-    fn set_c(&mut self, value: u8) {
-        self.BC = (self.BC & 0xff00) & value as u16
-    }
-    fn set_d(&mut self, value: u8) {
-        self.DE = (self.DE & 0x00ff) & value as u16
-    }
-    fn set_e(&mut self, value: u8) {
-        self.DE = (self.DE & 0xff00) & value as u16
-    }
-    fn set_h(&mut self, value: u8) {
-        self.HL = (self.HL & 0xff00) & value as u16
-    }
-    fn set_l(&mut self, value: u8) {
-        self.HL = (self.HL & 0x00ff) & value as u16
+    fn reset_all_flags(&mut self) {
+        self.AF = self.AF & 0xff00;
     }
 
-    fn set_fz(&mut self, z: bool) {
-        self.AF = self.AF & 0x80 | (z as u16 & 1 << 7);
-    }
-    fn set_fn(&mut self, n: bool) {
-        self.AF = self.AF & 0x40 | (n as u16 & 1 << 6);
-    }
-    fn set_fh(&mut self, h: bool) {
-        self.AF = self.AF & 0x20 | (h as u16 & 1 << 5);
-    }
-    fn set_fc(&mut self, c: bool) {
-        self.AF = self.AF & 0x10 | (c as u16 & 1 << 4);
+    fn get_flag(&self, flag: Flag) -> bool {
+        let flag = flag as u16;
+        (self.AF & flag) == flag
     }
 
     fn set_clocks(&mut self, m: u8, t: u8) {
@@ -165,12 +200,25 @@ impl Cpu {
             _ => (Opcode::Normal, self.execute(opcode, mem)),
         };
 
-        self.handle_execute(opcode_type, r)
+        self.handle_execute(opcode_type, r);
+        self.check_interrupts(opcode);
+
+        self.check_interrupt_status(mem);
+    }
+    fn check_interrupts(&mut self, last_opcode: u8) {
+        if self.DI && last_opcode & 0xf3 != last_opcode {
+            self.DI = false;
+            self.IME = false;
+        }
+        if self.EI && last_opcode & 0xfb != last_opcode {
+            self.EI = false;
+            self.IME = true;
+        }
     }
 
     fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction) {
         match result {
-            Instruction::Info(length, clocks, _description) => {
+            Instruction::Ok(length, clocks, _description) => {
                 self.set_clocks(0, clocks);
                 let _ = self.PC.wrapping_add(length);
             }
@@ -178,4 +226,33 @@ impl Cpu {
             Instruction::Unimplemented(opcode) => println!("unimplemented opcode {opcode}"),
         }
     }
+    fn check_interrupt_status(&mut self, mem: &mut mem::Memory) {
+        //Go through the five different interrupts and see if any is triggered
+        if !self.IME {
+            return;
+        }
+        let enabled_interrupts = mem.read_word(0xFFFF);
+
+        for i in 0..=4 {
+            let interupt = self.interrupts & (1 << i);
+            if interupt == 0 {
+                continue;
+            }
+            if (enabled_interrupts & interupt) == 0 {
+                continue;
+            }
+            let restart_address: u16;
+            match i {
+                0 => restart_address = 0x40,
+                1 => restart_address = 0x48,
+                2 => restart_address = 0x50,
+                3 => restart_address = 0x58,
+                4 => restart_address = 0x60,
+                _ => panic!("unknown flag"),
+            }
+            self.rst(mem, restart_address);
+        }
+    }
+
+  
 }

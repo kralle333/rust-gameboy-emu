@@ -1,3 +1,5 @@
+use std::ops::Shl;
+
 pub struct Memory {
     rom: [u8; 0x8000],
     work_ram: [u8; 0x2000],
@@ -9,7 +11,14 @@ pub struct Memory {
 
 impl Memory {
     pub fn new() -> Memory {
-        todo!()
+        Memory {
+            rom: [0; 0x8000],
+            work_ram: [0; 0x2000],
+            ext_ram: [0; 0x2000],
+            _high_ram: [0; 0x7F],
+            rom_offset: 0,
+            _ram_offset: 0,
+        }
     }
 
     pub fn load(&mut self, data: Vec<u8>) {
@@ -30,15 +39,15 @@ impl Memory {
 
     pub fn read_word(&self, addr: u16) -> u16 {
         let lsn = self.read_byte(addr);
-        let msn = self.read_byte(addr + 1);
+        let msn = self.read_byte(addr + 1).shl(8);
 
         msn as u16 | lsn as u16
     }
 
-    pub fn write_byte(&self, _addr: u16, _value: u8) {}
+    pub fn write_byte(&self, addr: u16, val: u8) {}
 
-    pub fn write_word(&self, addr: u16, value: u16) {
-        self.write_byte(addr, (value & 0xFF) as u8);
-        self.write_byte(addr + 1, (value & 0xFF00) as u8);
+    pub fn write_word(&self, addr: u16, val: u16) {
+        self.write_byte(addr, (val & 0xFF) as u8);
+        self.write_byte(addr + 1, (val & 0xFF00) as u8);
     }
 }

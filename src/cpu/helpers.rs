@@ -1,9 +1,11 @@
-use crate::mem;
+use std::rc;
 
-use super::{Cpu, Register};
+use crate::mem::{self, Memory};
+
+use super::{Cpu, Flag, Register};
 
 pub enum Instruction {
-    Info(u16, u8, &'static str),
+    Ok(u16, u8, &'static str),
     Invalid(u8),
     Unimplemented(u8),
 }
@@ -29,19 +31,78 @@ impl Cpu {
             None => (a.wrapping_add(b), true),
         }
     }
+
+    pub fn add_a(&mut self, b: u8) {
+        let a = self.get_a();
+        let (new_a, carry) = Self::overflow_add(a, b);
+        self.set_a(new_a);
+        self.set_flag(Flag::Z, new_a == 0);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, Self::is_half_carry_add(a, b));
+        self.set_flag(Flag::C, carry);
+    }
+    pub fn adc_a(&mut self, b: u8) {
+        self.add_a(b + self.get_flag(Flag::C) as u8);
+    }
+    pub fn sub_a(&mut self, b: u8) {
+        let a = self.get_a();
+        let (new_a, borrow) = Self::borrow_sub(b, a);
+        self.set_a(new_a);
+        self.set_flag(Flag::Z, new_a == 0);
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::H, !Self::is_half_borrowing_sub(b, a));
+        self.set_flag(Flag::C, !borrow);
+    }
+    pub fn sbc_a(&mut self, b: u8) {
+        self.sub_a(b + self.get_flag(Flag::C) as u8);
+    }
+
     pub fn add_16(&mut self, reg: u16, val: u16) -> u16 {
         let (result, overflow) = Self::overflow_add_16(reg, val);
-        self.set_fh(Self::is_half_carry_on_add_16(reg, val));
-        self.set_fc(overflow);
-        self.set_fn(false);
+        self.set_flag(Flag::H, Self::is_half_carry_on_add_16(reg, val));
+        self.set_flag(Flag::C, overflow);
+        self.set_flag(Flag::N, false);
         result
     }
     pub fn sub_16(&mut self, reg: u16, val: u16) -> u16 {
         let (result, overflow) = Self::borrow_sub_16(reg, val);
-        self.set_fh(Self::is_half_carry_on_sub_16(reg, val)); // TODO FIX
-        self.set_fc(overflow);
-        self.set_fn(false);
+        self.set_flag(Flag::H, Self::is_half_carry_on_sub_16(reg, val)); // TODO FIX
+        self.set_flag(Flag::C, overflow);
+        self.set_flag(Flag::N, false);
         result
+    }
+
+    pub fn and_a(&mut self, b: u8){
+        let a = self.get_a();
+        let result =a & b;
+        self.set_a(result);
+        self.set_flag(Flag::Z, result == 0);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, true);
+        self.set_flag(Flag::C, false);
+    }
+    pub fn xor_a(&mut self, b: u8){
+        let a = self.get_a();
+        let result =a ^ b;
+        self.set_a(result);
+        self.set_flag(Flag::Z, result == 0);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, false);
+        self.set_flag(Flag::C, false);
+    }
+    pub fn or_a(&mut self, b: u8){
+        let a = self.get_a();
+        let result =a | b;
+        self.set_a(result);
+        self.set_flag(Flag::Z, result == 0);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, false);
+        self.set_flag(Flag::C, false);
+    }
+    pub fn cp_a(&mut self, b: u8){
+        let a = self.get_a();
+        self.sub_a(b);
+        self.set_a(a);
     }
     pub fn borrow_sub(b: u8, a: u8) -> (u8, bool) {
         match b.checked_sub(a) {
@@ -57,59 +118,60 @@ impl Cpu {
     }
 
     pub fn dec_register(&mut self, register: Register) {
-        // Decrement the value in the register
-        let value = self.get(register) - 1;
-        let borrow = value > 0;
-    
-        // Update the flags
-        self.set_fh(!borrow);
-        self.set_fn(true);
-        self.set_fz(value == 0);
-    
-        // Set the new value in the register
-        self.set(register, value)
+        let mut val = self.get_reg(register);
+        let half_borrow = Self::is_half_borrowing_sub(val, 1);
+        val = val.wrapping_sub(1);
+        self.set_reg(register, val);
+
+        self.set_flag(Flag::H, half_borrow);
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, val == 0);
+    }
+
+    pub fn pop_sp(&mut self, mem:&Memory,rcv:u16)->u16{
+        let out = rcv.wrapping_add(mem.read_word(self.SP));
+        self.SP = self.SP.wrapping_add(2);
+        out
+    }
+    pub fn push_sp(&mut self, mem:&mut Memory,rcv:u16){
+        self.SP = self.SP.wrapping_sub(2);
+        mem.write_word(self.SP, rcv);
+    }
+
+    pub fn call(&mut self, mem: &mut Memory){
+        self.push_sp(mem, self.PC);
+        self.PC = self.get_nn(mem);
+    }
+
+    pub fn rst(&mut self, mem:&mut Memory, addr:u16){
+        self.push_sp(mem, self.PC);
+        self.PC = addr; 
+        self.IME = false;
+        self.HALT = false;
     }
 
     pub fn inc_register(&mut self, register: Register) {
-        let (value, carry) = Self::overflow_add(self.get(register), 1);
-        if carry {
-            self.set_fh(true);
-        }
-        self.set_fn(false);
-        if self.get_b() == 0 {
-            self.set_fz(false)
-        }
-        self.set(register, value)
+        let mut val = self.get_reg(register);
+        let borrow = Self::is_half_carry_add(val, 1);
+        val = val.wrapping_add(1);
+        self.set_reg(register, val);
+
+        self.set_flag(Flag::H, borrow);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::Z, val == 0)
+    }
+
+    pub fn is_half_carry_add(a: u8, b: u8) -> bool {
+        ((a & 0x0F) + (b & 0x0F)) > 0xF
+    }
+    pub fn is_half_borrowing_sub(b: u8, a: u8) -> bool {
+        (b & 0xF) < (a & 0xF)
     }
 
     pub fn is_half_carry_on_add_16(a: u16, b: u16) -> bool {
         (a & 0xFFF) + (b & 0xFFF) > 0xFFF
     }
-    pub fn is_half_carry_on_sub_16(a: u16, b: u16) -> bool { //TODO: DOUBLE CHECK
-        (a & 0xFFF).wrapping_sub(b & 0xFFF) < a
-    }
-    //Bit setting/getting
-    fn set_bits(var: u8, value: u8, pos: u8, len: u8) -> u8 {
-        (var & !(len << pos)) | (value & len) << pos
-    }
-    fn get_bits(var: u8, pos: u8, len: u8) -> u8 {
-        (var >> ((pos + 1) - len)) & len
-    }
-    fn set_bit(var: u8, value: u8, pos: u8) -> u8 {
-        Self::set_bits(var, value, pos, 1)
-    }
-    fn get_bit(var: u8, pos: u8) -> u8 {
-        var >> pos & 1
-    }
-
-    //Rotations
-    fn rotate_left(a: u8, n: u8) -> u8 {
-        (a << n) | (a >> (8 - n))
-    }
-    fn rotate_right(a: u8, n: u8) -> u8 {
-        (a >> n) | (a << (8 - n))
-    }
-    fn swap_hexits(a: u8) -> u8 {
-        Self::rotate_right(a, 4)
+    pub fn is_half_carry_on_sub_16(b: u16, a: u16) -> bool {
+        (a & 0xFFF) > (b & 0xFFF)
     }
 }
