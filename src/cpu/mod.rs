@@ -7,7 +7,7 @@ mod helpers;
 
 use std::ops::{Shl, Shr};
 
-use crate::mem;
+use crate::memory::{self, MemoryType};
 
 use self::helpers::Instruction;
 
@@ -22,7 +22,7 @@ pub struct Cpu {
 
     IME: bool,
     HALT: bool,
-    interrupts: u16,
+
     DI: bool,
     EI: bool,
     clock_m: u8,
@@ -36,7 +36,6 @@ pub enum Register {
     C,
     D,
     E,
-    F,
     H,
     L,
 }
@@ -75,21 +74,17 @@ impl Cpu {
             clock_t: 1,
             IME: false,
             HALT: false,
-            interrupts: 0,
             DI: false,
             EI: false,
         }
     }
 
-    pub fn tick(&mut self, mem: &mut mem::Memory) {
+    pub fn tick(&mut self, mem: &mut memory::Memory) {
         self.fetch_decode(mem)
     }
 
     fn get_a(&self) -> u8 {
         Self::get_upper(self.AF)
-    }
-    fn get_f(&self) -> u8 {
-        Self::get_lower(self.AF)
     }
     fn get_b(&self) -> u8 {
         Self::get_upper(self.BC)
@@ -117,7 +112,6 @@ impl Cpu {
             Register::C => self.set_c(val),
             Register::D => self.set_d(val),
             Register::E => self.set_e(val),
-            Register::F => self.set_f(val),
             Register::H => self.set_h(val),
             Register::L => self.set_l(val),
         }
@@ -129,7 +123,6 @@ impl Cpu {
             Register::C => self.get_c(),
             Register::D => self.get_d(),
             Register::E => self.get_e(),
-            Register::F => self.get_f(),
             Register::H => self.get_h(),
             Register::L => self.get_l(),
         }
@@ -148,9 +141,6 @@ impl Cpu {
     }
     fn set_a(&mut self, val: u8) {
         self.AF = Self::set_upper(self.AF, val);
-    }
-    fn set_f(&mut self, val: u8) {
-        self.AF = Self::set_lower(self.AF, val);
     }
     fn set_b(&mut self, val: u8) {
         self.BC = Self::set_upper(self.BC, val);
@@ -192,20 +182,30 @@ impl Cpu {
         self.clock_t = t;
     }
 
-    fn fetch_decode(&mut self, mem: &mut mem::Memory) {
+    fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         let opcode = mem.read_byte(self.PC);
 
         let (opcode_type, r) = match opcode {
             0xcb => (Opcode::CB, self.execute_cb(opcode, mem)),
             _ => (Opcode::Normal, self.execute(opcode, mem)),
         };
-
+    
         self.handle_execute(opcode_type, r);
-        self.check_interrupts(opcode);
-
-        self.check_interrupt_status(mem);
+        self.check_interrupt_status(mem, opcode);
     }
-    fn check_interrupts(&mut self, last_opcode: u8) {
+
+    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction) {
+        match result {
+            Instruction::Ok(opcode,length, clocks, description) => {
+                self.set_clocks(0, clocks);
+                self.PC = self.PC.wrapping_add(length);
+                println!("{:#01x} - {description}",opcode);
+            }
+            Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),        }
+    }
+    fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode:u8) {
+        //Go through the five different interrupts and see if any is triggered
+
         if self.DI && last_opcode & 0xf3 != last_opcode {
             self.DI = false;
             self.IME = false;
@@ -214,31 +214,18 @@ impl Cpu {
             self.EI = false;
             self.IME = true;
         }
-    }
-
-    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction) {
-        match result {
-            Instruction::Ok(length, clocks, _description) => {
-                self.set_clocks(0, clocks);
-                let _ = self.PC.wrapping_add(length);
-            }
-            Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),
-            Instruction::Unimplemented(opcode) => println!("unimplemented opcode {opcode}"),
-        }
-    }
-    fn check_interrupt_status(&mut self, mem: &mut mem::Memory) {
-        //Go through the five different interrupts and see if any is triggered
         if !self.IME {
             return;
         }
-        let enabled_interrupts = mem.read_word(0xFFFF);
+
+        let enabled_interrupts = mem.read_byte(0xFFFF);
+        let interupt_flag = mem.read_byte(0xFF0F);
+
+        let to_fire = enabled_interrupts & interupt_flag;
 
         for i in 0..=4 {
-            let interupt = self.interrupts & (1 << i);
+            let interupt = to_fire & (1 << i);
             if interupt == 0 {
-                continue;
-            }
-            if (enabled_interrupts & interupt) == 0 {
                 continue;
             }
             let restart_address: u16;

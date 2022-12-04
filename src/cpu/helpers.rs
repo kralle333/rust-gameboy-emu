@@ -1,20 +1,17 @@
-use std::rc;
-
-use crate::mem::{self, Memory};
+use crate::memory::{self, Memory, MemoryType};
 
 use super::{Cpu, Flag, Register};
 
 pub enum Instruction {
-    Ok(u16, u8, &'static str),
+    Ok(u8,u16, u8, &'static str),
     Invalid(u8),
-    Unimplemented(u8),
 }
 
 impl Cpu {
-    pub fn get_n(&self, mem: &mut mem::Memory) -> u8 {
+    pub fn get_n(&self, mem: &mut memory::Memory) -> u8 {
         mem.read_byte(self.PC + 1)
     }
-    pub fn get_nn(&self, mem: &mut mem::Memory) -> u16 {
+    pub fn get_nn(&self, mem: &mut memory::Memory) -> u16 {
         mem.read_word(self.PC + 1)
     }
 
@@ -66,40 +63,40 @@ impl Cpu {
     }
     pub fn sub_16(&mut self, reg: u16, val: u16) -> u16 {
         let (result, overflow) = Self::borrow_sub_16(reg, val);
-        self.set_flag(Flag::H, Self::is_half_carry_on_sub_16(reg, val)); // TODO FIX
+        self.set_flag(Flag::H, Self::is_half_carry_on_sub_16(reg, val));
         self.set_flag(Flag::C, overflow);
         self.set_flag(Flag::N, false);
         result
     }
 
-    pub fn and_a(&mut self, b: u8){
+    pub fn and_a(&mut self, b: u8) {
         let a = self.get_a();
-        let result =a & b;
+        let result = a & b;
         self.set_a(result);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, true);
         self.set_flag(Flag::C, false);
     }
-    pub fn xor_a(&mut self, b: u8){
+    pub fn xor_a(&mut self, b: u8) {
         let a = self.get_a();
-        let result =a ^ b;
+        let result = a ^ b;
         self.set_a(result);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, false);
         self.set_flag(Flag::C, false);
     }
-    pub fn or_a(&mut self, b: u8){
+    pub fn or_a(&mut self, b: u8) {
         let a = self.get_a();
-        let result =a | b;
+        let result = a | b;
         self.set_a(result);
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, false);
         self.set_flag(Flag::C, false);
     }
-    pub fn cp_a(&mut self, b: u8){
+    pub fn cp_a(&mut self, b: u8) {
         let a = self.get_a();
         self.sub_a(b);
         self.set_a(a);
@@ -128,24 +125,24 @@ impl Cpu {
         self.set_flag(Flag::Z, val == 0);
     }
 
-    pub fn pop_sp(&mut self, mem:&Memory,rcv:u16)->u16{
+    pub fn pop_sp(&mut self, mem: &Memory, rcv: u16) -> u16 {
         let out = rcv.wrapping_add(mem.read_word(self.SP));
         self.SP = self.SP.wrapping_add(2);
         out
     }
-    pub fn push_sp(&mut self, mem:&mut Memory,rcv:u16){
+    pub fn push_sp(&mut self, mem: &mut Memory, rcv: u16) {
         self.SP = self.SP.wrapping_sub(2);
         mem.write_word(self.SP, rcv);
     }
 
-    pub fn call(&mut self, mem: &mut Memory){
+    pub fn call(&mut self, mem: &mut Memory) {
         self.push_sp(mem, self.PC);
         self.PC = self.get_nn(mem);
     }
 
-    pub fn rst(&mut self, mem:&mut Memory, addr:u16){
+    pub fn rst(&mut self, mem: &mut Memory, addr: u16) {
         self.push_sp(mem, self.PC);
-        self.PC = addr; 
+        self.PC = addr;
         self.IME = false;
         self.HALT = false;
     }

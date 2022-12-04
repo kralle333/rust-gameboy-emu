@@ -3,7 +3,7 @@
 mod tests {
     use crate::{
         cpu::{self, helpers::Instruction, Flag, Register},
-        mem,
+        memory::{self},
     };
     fn get_registers() -> std::iter::Copied<std::slice::Iter<'static, Register>> {
         let registers = [
@@ -12,7 +12,6 @@ mod tests {
             Register::C,
             Register::D,
             Register::E,
-            Register::F,
             Register::H,
             Register::L,
         ]
@@ -38,7 +37,6 @@ mod tests {
     }
     #[test]
     fn test_bits() {
-        let mut m = mem::Memory::new();
         let mut c = cpu::Cpu::new();
         
         assert_eq!(c.set_bit(0,0),0b00000001);
@@ -63,13 +61,13 @@ mod tests {
 
     #[test]
     fn test_rcla() {
-        let mut m = mem::Memory::new();
+        let mut m = memory::Memory::new();
         let mut c = cpu::Cpu::new();
         c.set_a(0b10001000);
         c.set_flag(Flag::C, false);
         let i = c.execute(0x07, &mut m);
         match i {
-            Instruction::Ok(pc, cycles, info) => {
+            Instruction::Ok(opcode,pc, cycles, info) => {
                 assert_eq!(pc, 1);
                 assert_eq!(cycles, 4);
                 assert_eq!(info, "RLCA");
@@ -82,13 +80,13 @@ mod tests {
 
     #[test]
     fn test_rra() {
-        let mut m = mem::Memory::new();
+        let mut m = memory::Memory::new();
         let mut c = cpu::Cpu::new();
         c.set_a(0b10001001);
         c.set_flag(Flag::C, true);
         let i = c.execute(0x1f, &mut m);
         match i {
-            Instruction::Ok(pc, cycles, info) => {
+            Instruction::Ok(opcode,pc, cycles, info) => {
                 assert_eq!(pc, 1);
                 assert_eq!(cycles, 1);
                 assert_eq!(info, "RRA");
@@ -136,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_inc_8b() {
-        let mut m = mem::Memory::new();
+        let mut m = memory::Memory::new();
         let mut c = cpu::Cpu::new();
         c.set_e(0xFF);
         c.execute(0x1c, &mut m);

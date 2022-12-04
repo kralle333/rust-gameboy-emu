@@ -1,7 +1,8 @@
 mod cpu;
 mod emulator;
 mod input;
-mod mem;
+mod memory;
+mod sdl_wrapper;
 mod video;
 
 extern crate sdl2;
@@ -11,40 +12,28 @@ use sdl2::event::Event;
 use std::time::Duration;
 
 pub fn main() {
-    let sdl_context = sdl2::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
-    let _audio_subsystem = sdl_context.audio().expect("Unable to init audio");
-
-    let window = video_subsystem
-        .window(
-            "GameBoy Emulator",
-            (video::SCREEN_WIDTH * video::PIXEL_SIZE as usize) as u32,
-            (video::SCREEN_HEIGHT * video::PIXEL_SIZE as usize) as u32,
-        )
-        .position_centered()
-        .build()
-        .unwrap();
-    let mut canvas = window.into_canvas().build().unwrap();
+    let mut sdl = sdl_wrapper::SdlWrapper::new();
 
     let mut emulator = emulator::Emulator::new();
-
-    emulator.load_game("<Your rom file here!>");
-
-    canvas.clear();
-    canvas.present();
-    let mut event_pump = sdl_context.event_pump().unwrap();
+    let rom_path = std::env::args().nth(1).expect("no rom path given");
+    emulator.load_game(rom_path.to_string());
 
     let mut input = input::Input::new();
+    let mut canvas = sdl.get_window_canvas(
+        "Gameboy Emulator",
+        video::SCREEN_WIDTH * video::PIXEL_SIZE,
+        video::SCREEN_HEIGHT * video::PIXEL_SIZE,
+    );
 
     'running: loop {
-        // Start playback
-        for event in event_pump.poll_iter() {
-            if let Event::Quit { .. } = event {
+        let events = sdl.get_events();
+        for e in events {
+            if let Event::Quit { .. } = e {
                 break 'running;
             }
-            input.consume_keys(event);
-            break;
+            input.consume_keys(e)
         }
+
         emulator.tick(&input);
         canvas.clear();
         emulator.draw(&mut canvas);
