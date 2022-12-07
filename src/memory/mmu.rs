@@ -16,7 +16,7 @@ impl MemoryType for Mmu {
             0xa000..=0xbfff => self.ext_ram[addr & 0x1fff],
             0xc000..=0xdfff => self.work_ram[addr & 0x1fff],
             0xe000..=0xfdff => self.work_ram[(addr - 0x2000) & 0x1fff], // echo
-            0xff80..=0xfffe => self._high_ram[addr & 0x7e],
+            0xff80..=0xfffe => self._high_ram[addr & 127],
             _ => panic!("mmu fail")
         }
     }
@@ -27,7 +27,7 @@ impl MemoryType for Mmu {
             0xa000..=0xbfff => self.ext_ram[addr & 0x1fff] = val,
             0xc000..=0xdfff => self.work_ram[addr & 0x1fff] = val,
             0xe000..=0xfdff => self.work_ram[(addr - 0x2000) & 0x1fff] = val,
-            0xff80..=0xfffe => self._high_ram[addr & 0x7e] = val,
+            0xff80..=0xfffe => self._high_ram[addr & 127] = val,
             _ => panic!("mmu fail")
         }
     }

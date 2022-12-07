@@ -2,8 +2,8 @@
 mod cpu_test;
 mod execute;
 mod execute_cb;
-mod helpers_cb;
 mod helpers;
+mod helpers_cb;
 
 use std::ops::{Shl, Shr};
 
@@ -69,7 +69,7 @@ impl Cpu {
             DE: 0x00D8,
             HL: 0x014D,
             SP: 0xFFFE,
-            PC: 0x100,
+            PC: 0x0100,
             clock_m: 0,
             clock_t: 1,
             IME: false,
@@ -184,26 +184,27 @@ impl Cpu {
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         let opcode = mem.read_byte(self.PC);
-
+        let regs = self.registers_str(&mem);
         let (opcode_type, r) = match opcode {
             0xcb => (Opcode::CB, self.execute_cb(opcode, mem)),
             _ => (Opcode::Normal, self.execute(opcode, mem)),
         };
-    
-        self.handle_execute(opcode_type, r);
+
+        self.handle_execute(opcode_type, r, regs);
         self.check_interrupt_status(mem, opcode);
     }
 
-    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction) {
+    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction, regs:String) {
         match result {
-            Instruction::Ok(opcode,length, clocks, description) => {
+            Instruction::Ok(opcode, length, clocks, description) => {
                 self.set_clocks(0, clocks);
                 self.PC = self.PC.wrapping_add(length);
-                println!("{:#01x} - {description}",opcode);
+                println!("{0:010}: {1:#06x} - {2}",description,opcode,regs);
             }
-            Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),        }
+            Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),
+        }
     }
-    fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode:u8) {
+    fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {
         //Go through the five different interrupts and see if any is triggered
 
         if self.DI && last_opcode & 0xf3 != last_opcode {
@@ -241,5 +242,10 @@ impl Cpu {
         }
     }
 
-  
+    pub(crate) fn registers_str(&self, mem:&memory::Memory) -> String {
+        format!(
+            "PC:{0:#06x} SP: {1:#06x} AF: {2:#06x} BC: {3:#06x} DE: {4:#06x} HL: {5:#06x} a16: {6:#06x}",
+            self.PC, self.SP, self.AF, self.BC, self.DE, self.HL,self.get_nn(mem)
+        )
+    }
 }

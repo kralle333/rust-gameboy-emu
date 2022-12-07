@@ -30,7 +30,8 @@ impl Emulator {
         }
     }
 
-    pub fn draw(&self, _canvas: &mut Canvas<Window>) {
+    pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
+        self.memory.draw(canvas);
     }
 
     pub fn tick(&mut self, keys: &Input) {

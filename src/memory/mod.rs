@@ -1,10 +1,13 @@
 mod gpu;
 mod mbc;
 mod mmu;
+mod mem_test;
 
 use std::ops::{Shl, Shr};
 
-use self::{gpu::Gpu, mbc::Mbc, mmu::Mmu};
+use sdl2::{render::Canvas, video::Window};
+
+use self::{mbc::Mbc, mmu::Mmu, gpu::Gpu};
 
 pub trait MemoryType {
     fn read_byte(&self, addr: u16) -> u8;
@@ -15,8 +18,10 @@ pub trait MemoryType {
         msn | lsn
     }
     fn write_word(&mut self, addr: u16, val: u16) {
-        self.write_byte(addr, (val & 0xFF) as u8);
-        self.write_byte(addr + 1, (val & 0xFF00).shr(8) as u8);
+        let lsn = val & 0xFF;
+        let msn = (val & 0xFF00) >> 8;
+        self.write_byte(addr, lsn as u8);
+        self.write_byte(addr+1,  msn as u8);
     }
 }
 
@@ -77,5 +82,8 @@ impl Memory {
 
     pub fn load(&mut self, data: Vec<u8>) {
         self.mbc.load(&data);
+    }
+    pub fn draw(&mut self,  canvas:&mut Canvas<Window>){
+        self.gpu.draw(canvas)
     }
 }

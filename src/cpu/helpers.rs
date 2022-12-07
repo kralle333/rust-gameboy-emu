@@ -3,7 +3,7 @@ use crate::memory::{self, Memory, MemoryType};
 use super::{Cpu, Flag, Register};
 
 pub enum Instruction {
-    Ok(u8,u16, u8, &'static str),
+    Ok(u8, u16, u8, &'static str),
     Invalid(u8),
 }
 
@@ -11,7 +11,7 @@ impl Cpu {
     pub fn get_n(&self, mem: &mut memory::Memory) -> u8 {
         mem.read_byte(self.PC + 1)
     }
-    pub fn get_nn(&self, mem: &mut memory::Memory) -> u16 {
+    pub fn get_nn(&self, mem: &memory::Memory) -> u16 {
         mem.read_word(self.PC + 1)
     }
 
@@ -125,13 +125,13 @@ impl Cpu {
         self.set_flag(Flag::Z, val == 0);
     }
 
-    pub fn pop_sp(&mut self, mem: &Memory, rcv: u16) -> u16 {
-        let out = rcv.wrapping_add(mem.read_word(self.SP));
-        self.SP = self.SP.wrapping_add(2);
+    pub fn pop_sp(&mut self, mem: &Memory) -> u16 {
+        let out = mem.read_word(self.SP);
+        self.SP += 2;
         out
     }
     pub fn push_sp(&mut self, mem: &mut Memory, rcv: u16) {
-        self.SP = self.SP.wrapping_sub(2);
+        self.SP -= 2;
         mem.write_word(self.SP, rcv);
     }
 

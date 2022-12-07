@@ -21,8 +21,8 @@ pub fn main() {
     let mut input = input::Input::new();
     let mut canvas = sdl.get_window_canvas(
         "Gameboy Emulator",
-        video::SCREEN_WIDTH * video::PIXEL_SIZE,
-        video::SCREEN_HEIGHT * video::PIXEL_SIZE,
+        (video::SCREEN_WIDTH * video::PIXEL_SIZE) as u32,
+        (video::SCREEN_HEIGHT * video::PIXEL_SIZE) as u32,
     );
 
     'running: loop {

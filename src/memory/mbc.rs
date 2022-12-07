@@ -34,6 +34,6 @@ impl Mbc {
     }
 
     pub fn load(&mut self, data: &[u8]) {
-        self.rom.copy_from_slice(data);
+        self.rom.copy_from_slice(&data[..0x8000]);
     }
 }
