@@ -40,6 +40,8 @@ pub struct Gpu {
     objects: [ObjData; 40],
     oam: [u8; 0xA0],
     bg_tiles: [Tile16; 384],
+    clock: u32,
+    mode: i32,
     //Video registers
     lcdc: u8,                           //FF40
     lcdc_stat: u8,                      //FF41
@@ -85,21 +87,21 @@ impl MemoryType for Gpu {
         match addr {
             0x8000..=0x9fff => self.vram[(addr & 0x1fff) as usize] = val,
             0xfe00..=0xfea0 => self.oam[(addr & 160) as usize] = val,
-            0xff40..=0xff49 => match addr & 0x00FF {
-                0x40 => self.lcdc  = val,
-                0x41 => self.lcdc_stat  = val,
-                0x42 => self.scroll_y  = val,
-                0x43 => self.scroll_x  = val,
-                0x44 => self.vert_line  = val,
-                0x45 => self.vert_line_cp  = val,
-                0xFA => self.window_x  = val,
-                0xFB => self.window_y  = val,
-                0x47 => self.bg_palette  = val,
-                0x48 => self.obj_palette0  = val,
-                0x49 => self.obj_palette1  = val,
+            0xff40..=0xff4b => match addr & 0x00FF {
+                0x40 => self.lcdc = val,
+                0x41 => self.lcdc_stat = val,
+                0x42 => self.scroll_y = val,
+                0x43 => self.scroll_x = val,
+                0x44 => self.vert_line = val,
+                0x45 => self.vert_line_cp = val,
+                0x47 => self.bg_palette = val,
+                0x48 => self.obj_palette0 = val,
+                0x49 => self.obj_palette1 = val,
+                0x4a => self.window_x = val,
+                0x4b => self.window_y = val,
                 _ => panic!("video flags"),
             },
-            _ => panic!("video"),
+            _ => panic!("video addr {addr}"),
         }
     }
 }
@@ -126,11 +128,14 @@ impl Gpu {
             background_palette: [0; 4],
             object_palette0: [0; 4],
             object_palette1: [0; 4],
+            clock: 0,
+            mode: 0,
         }
     }
+
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
-        for x in 0..video::SCREEN_WIDTH-1 {
-            for y in 0..video::SCREEN_HEIGHT-1 {
+        for x in 0..video::SCREEN_WIDTH - 1 {
+            for y in 0..video::SCREEN_HEIGHT - 1 {
                 let color = match self.pixels[x + video::SCREEN_WIDTH * y] {
                     0 => Color::RGBA(0x9C, 0xBD, 0x0F, 0xFF),
                     1 => Color::RGBA(0x8C, 0xAD, 0x0F, 0xFF),
@@ -153,6 +158,77 @@ impl Gpu {
                 }
             }
         }
+    }
+
+    pub fn tick(&mut self, clock_t: u32) -> u8 {
+        let mut interrupts: u8 = 0;
+        self.clock += clock_t;
+        if self.vert_line == self.vert_line_cp {
+            self.lcdc_stat = (self.lcdc_stat & 0xFC) | 0x1; // lcdc modeflag: 01
+            if (self.lcdc_stat & (1 << 6)) > 0 {
+                interrupts |= 0x2;
+            }
+        } else {
+            self.lcdc_stat = self.lcdc_stat & 0xFC; // lcdc modeflag: 00
+        }
+        match self.mode {
+            //OAM read
+            2 => {
+                if self.clock >= 80 {
+                    self.clock = 0;
+                    self.mode = 3;
+                }
+            }
+            //OAM and VRAM reading
+            3 => {
+                if self.clock >= 172 {
+                    self.clock = 0;
+                    self.mode = 0;
+                    self.render_screen();
+                    if self.lcdc_stat & (1 << 3) > 0 {
+                        interrupts |= 0x2;
+                    }
+                }
+            }
+
+            //HBlank
+            0 => {
+                if self.clock >= 204 {
+                    self.clock = 0;
+                    self.vert_line += 1;
+                    if self.vert_line == 143 {
+                        self.mode = 1;
+                        //justDrew = true; //TODO: what is this
+                        if self.lcdc_stat & (1 << 4) > 0 {
+                            interrupts |= 0x2;
+                        }
+                        interrupts |= 0x1;
+                        //WriteTileDataToFile("../tiledata.txt");
+                        //WriteTileMapToFile("../tilemap.txt");
+                    } else {
+                        self.mode = 2;
+                        if self.lcdc_stat & (1 << 5) > 0 {
+                            interrupts |= 0x2;
+                        }
+                    }
+                }
+            }
+
+            //VBlank
+            1 => {
+                //justDrew = false; //TODO: figure out
+                if self.clock >= 456 {
+                    self.vert_line += 1;
+                    self.clock = 0;
+                    if self.vert_line > 153 {
+                        self.mode = 2;
+                        self.vert_line = 0;
+                    }
+                }
+            }
+            _ => panic!("what"),
+        }
+        interrupts
     }
 
     pub fn render_screen(&mut self) {

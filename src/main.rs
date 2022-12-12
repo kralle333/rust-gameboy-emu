@@ -25,6 +25,8 @@ pub fn main() {
         (video::SCREEN_HEIGHT * video::PIXEL_SIZE) as u32,
     );
 
+    emulator.reset();
+
     'running: loop {
         let events = sdl.get_events();
         for e in events {

@@ -26,7 +26,7 @@ pub struct Cpu {
     DI: bool,
     EI: bool,
     clock_m: u8,
-    clock_t: u8,
+    clock_t: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -81,6 +81,10 @@ impl Cpu {
 
     pub fn tick(&mut self, mem: &mut memory::Memory) {
         self.fetch_decode(mem)
+    }
+
+    pub fn get_clock_t(&self) -> u32 {
+        self.clock_t
     }
 
     fn get_a(&self) -> u8 {
@@ -177,7 +181,7 @@ impl Cpu {
         (self.AF & flag) == flag
     }
 
-    fn set_clocks(&mut self, m: u8, t: u8) {
+    fn set_clocks(&mut self, m: u8, t: u32) {
         self.clock_m = m;
         self.clock_t = t;
     }
@@ -194,12 +198,12 @@ impl Cpu {
         self.check_interrupt_status(mem, opcode);
     }
 
-    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction, regs:String) {
+    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction, regs: String) {
         match result {
             Instruction::Ok(opcode, length, clocks, description) => {
                 self.set_clocks(0, clocks);
                 self.PC = self.PC.wrapping_add(length);
-                println!("{0:010}: {1:#06x} - {2}",description,opcode,regs);
+                println!("{0:010}: {1:#06x} - {2}", description, opcode, regs);
             }
             Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),
         }
@@ -242,7 +246,7 @@ impl Cpu {
         }
     }
 
-    pub(crate) fn registers_str(&self, mem:&memory::Memory) -> String {
+    pub(crate) fn registers_str(&self, mem: &memory::Memory) -> String {
         format!(
             "PC:{0:#06x} SP: {1:#06x} AF: {2:#06x} BC: {3:#06x} DE: {4:#06x} HL: {5:#06x} a16: {6:#06x}",
             self.PC, self.SP, self.AF, self.BC, self.DE, self.HL,self.get_nn(mem)

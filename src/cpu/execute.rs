@@ -815,7 +815,7 @@ impl Cpu {
             0xc0 => {
                 if !self.get_flag(Flag::Z) {
                     self.PC = self.pop_sp(mem);
-                    return Instruction::Ok(opcode, 1, 20, "RET NZ");
+                    return Instruction::Ok(opcode, 0, 20, "RET NZ");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET NZ")
             }
@@ -852,7 +852,7 @@ impl Cpu {
             }
             0xc7 => {
                 self.rst(mem, 0x00);
-                Instruction::Ok(opcode, 1, 16, "RST 0")
+                Instruction::Ok(opcode, 0, 16, "RST 0")
             }
             0xc8 => {
                 if self.get_flag(Flag::Z) {
@@ -863,7 +863,7 @@ impl Cpu {
             }
             0xc9 => {
                 self.PC = self.pop_sp(mem);
-                return Instruction::Ok(opcode, 1, 4, "RET");
+                return Instruction::Ok(opcode, 0, 4, "RET");
             }
             0xca => {
                 if self.get_flag(Flag::Z) {
@@ -890,7 +890,7 @@ impl Cpu {
             }
             0xcf => {
                 self.rst(mem, 0x08);
-                Instruction::Ok(opcode, 1, 16, "RST 1")
+                Instruction::Ok(opcode, 0, 16, "RST 1")
             }
             0xd0 => {
                 if !self.get_flag(Flag::C) {
@@ -928,7 +928,7 @@ impl Cpu {
             }
             0xd7 => {
                 self.rst(mem, 0x10);
-                Instruction::Ok(opcode, 1, 16, "RST 2")
+                Instruction::Ok(opcode, 0, 16, "RST 2")
             }
             0xd8 => {
                 if self.get_flag(Flag::C) {
@@ -967,7 +967,7 @@ impl Cpu {
             }
             0xdf => {
                 self.rst(mem, 0x18);
-                Instruction::Ok(opcode, 1, 16, "RST 3")
+                Instruction::Ok(opcode, 0, 16, "RST 3")
             }
             0xe0 => {
                 let val = self.get_n(mem) as u16;
@@ -994,7 +994,7 @@ impl Cpu {
             }
             0xe7 => {
                 self.rst(mem, 0x20);
-                Instruction::Ok(opcode, 1, 16, "RST 5")
+                Instruction::Ok(opcode, 0, 16, "RST 5")
             }
             0xe8 => {
                 self.SP = self.add_16(self.SP, self.get_n(mem) as u16);
@@ -1003,7 +1003,7 @@ impl Cpu {
             }
             0xe9 => {
                 self.PC = mem.read_word(self.HL);
-                Instruction::Ok(opcode, 1, 16, "JP (HL)")
+                Instruction::Ok(opcode, 0, 16, "JP (HL)")
             }
             0xea => {
                 let addr = self.get_nn(mem);
@@ -1019,7 +1019,7 @@ impl Cpu {
             }
             0xef => {
                 self.rst(mem, 0x28);
-                Instruction::Ok(opcode, 1, 16, "RST 5")
+                Instruction::Ok(opcode, 0, 16, "RST 5")
             }
             0xf0 => {
                 let val = self.get_n(mem) as u16;
@@ -1049,7 +1049,7 @@ impl Cpu {
             }
             0xf7 => {
                 self.rst(mem, 0x30);
-                Instruction::Ok(opcode, 1, 16, "RST 6")
+                Instruction::Ok(opcode, 0, 16, "RST 6")
             }
             0xf8 => {
                 let r8 = self.get_n(mem) as u16;
@@ -1078,7 +1078,7 @@ impl Cpu {
             }
             0xff => {
                 self.rst(mem, 0x38);
-                Instruction::Ok(opcode, 1, 16, "RST 7")
+                Instruction::Ok(opcode, 0, 16, "RST 7")
             }
         }
     }

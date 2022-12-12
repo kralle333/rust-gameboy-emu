@@ -20,21 +20,20 @@ impl Emulator {
         }
     }
     pub fn load_game(&mut self, file_path: String) {
-        match fs::read(file_path) {
-            Ok(data) => {
-                self.memory.load(data);
-            }
-            Err(e) => {
-                panic!("ERROR {}", e);
-            }
-        }
+        let result = fs::read(file_path).expect("file not found") ;
+        self.memory.load(result);
     }
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
         self.memory.draw(canvas);
     }
 
+    pub fn reset(&mut self){
+        self.memory.reset();
+    }
+
     pub fn tick(&mut self, keys: &Input) {
-        self.cpu.tick(&mut self.memory)
+        self.cpu.tick(&mut self.memory);
+        self.memory.tick(self.cpu.get_clock_t());
     }
 }
