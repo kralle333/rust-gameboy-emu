@@ -10,19 +10,19 @@ const BLACK: Color = Color::RGBA(0x0F, 0x38, 0x0F, 0xFF);
 
 #[derive(Debug, PartialEq)]
 pub enum TickMode {
-    HBLANK = 0x00,
-    VBLANK = 0x01,
-    OAM = 0x10,
-    OAMVRAM = 0x11,
+    HBLANK = 0b00,
+    VBLANK = 0b01,
+    OAM = 0b10,
+    OAMVRAM = 0b11,
 }
 
 impl TickMode {
     fn from_val(val: u8) -> TickMode {
         match val {
-            0x00 => TickMode::HBLANK,
-            0x01 => TickMode::VBLANK,
-            0x10 => TickMode::OAM,
-            0x11 => TickMode::OAMVRAM,
+            0b00 => TickMode::HBLANK,
+            0b01 => TickMode::VBLANK,
+            0b10 => TickMode::OAM,
+            0b11 => TickMode::OAMVRAM,
             _ => TickMode::HBLANK,
         }
     }
@@ -117,7 +117,9 @@ impl MemoryType for Gpu {
         match addr {
             0x8000..=0x9fff => {
                 self.vram[(addr & 0x1fff) as usize] = val;
-                self.update_tile_data(addr, val);
+                if (addr & 0x1fff) < 384{
+                    self.update_tile_data(addr, val);
+                }
             }
             0xfe00..=0xfea0 => {
                 self.oam[(addr & 160) as usize] = val;
@@ -183,18 +185,15 @@ impl Gpu {
     fn set_mode(&mut self, val: TickMode) {
         let old = self.mode();
         if old != val {
-            println!("setting mode from {:?} to {:?}", old, val);
+            self.lcdc_stat = (self.lcdc_stat & !0x3)| (val as u8);
         }
-        self.lcdc_stat = (self.lcdc_stat & !0x3) | val as u8;
-
-        println!(":?",mode)
     }
     pub fn mode(&self) -> TickMode {
         TickMode::from_val(self.lcdc_stat & 0x3)
     }
     fn update_tile_data(&mut self, addr: u16, val: u8) {
         let mut write_addr = addr & 0x1FFF;
-        if addr & 1 == 0 {
+        if addr & 1 == 1 {
             write_addr -= 1;
         } //Because each line is represented as 2 lines, start with the first one
         let tile = write_addr >> 4; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
@@ -285,14 +284,12 @@ impl Gpu {
             //OAM read
             TickMode::OAM if self.clock >= 80 => {
                 self.clock = 0;
-                println!("OAM->OAM AND VRAM");
                 self.set_mode(TickMode::OAMVRAM);
             }
             //OAM and VRAM reading
             TickMode::OAMVRAM if self.clock >= 172 => {
                 self.clock = 0;
                 self.set_mode(TickMode::HBLANK);
-                println!("rendering");
                 self.render_screen();
                 if self.lcdc_stat & (1 << 3) > 0 {
                     interrupts |= 0x2;

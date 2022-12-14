@@ -49,7 +49,7 @@ impl Cpu {
     }
 
     pub fn swap(&mut self, val: u8) -> u8 {
-        let result = val.swap_bytes();
+        let result = (val >> 4) | (val << 4);
         self.reset_all_flags();
         self.set_flag(Flag::Z, result == 0);
         result

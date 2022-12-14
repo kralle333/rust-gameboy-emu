@@ -3,13 +3,14 @@ mod gpu_test;
 mod mbc;
 mod mem_test;
 mod mmu;
+mod sound;
 
 use std::ops::Shl;
 
-use sdl2::{render::Canvas, video::Window};
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 
-
-use self::{gpu::Gpu, mbc::Mbc, mmu::Mmu};
+use self::{gpu::Gpu, mbc::Mbc, mmu::Mmu, sound::Sound};
 
 const divider_add: i16 = 16384;
 
@@ -39,6 +40,7 @@ pub struct Memory {
     mbc: Mbc,
     mmu: Mmu,
     gpu: Gpu,
+    snd: Sound,
     interupt_enable: u8,
     interupt_flag: u8,
 
@@ -59,7 +61,10 @@ impl MemoryType for Memory {
             0x8000..=0x9fff => self.gpu.read_byte(addr),
             0xa000..=0xfdff => self.mmu.read_byte(addr),
             0xfe00..=0xfe9f => self.gpu.read_byte(addr),
-            0xfea0..=0xfeff => panic!("invalid address"),
+            0xfea0..=0xfeff => {
+                println!("Reading from empty but unusable for I/O");
+                0
+            }
             0xff00 => self.joypad,
             0xff01 => self.serial_transfer_data,
             0xff02 => self.serial_transer_control,
@@ -68,12 +73,18 @@ impl MemoryType for Memory {
             0xff06 => self.timer_modulo,
             0xff07 => self.timer_control,
             0xff0f => self.interupt_flag,
-            0xff10..=0xff3f => 0, // TODO: SOUND
+            0xff10..=0xff3f => self.snd.read_byte(addr),
             0xff40..=0xff4b => self.gpu.read_byte(addr),
             0xff80..=0xfffe => self.mmu.read_byte(addr),
-            0xff4c..=0xfffe => panic!("invalid"),
+            0xff4c..=0xff7f => {
+                println!("Reading from empty but unusable for I/O");
+                0
+            }
             0xffff => self.interupt_enable,
-            _ => panic!(),
+            _ => {
+                println!("Reading from invalid address {}", addr);
+                0
+            }
         }
     }
 
@@ -83,7 +94,7 @@ impl MemoryType for Memory {
             0x8000..=0x9fff => self.gpu.write_byte(addr, val),
             0xa000..=0xfdff => self.mmu.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
-            0xfea0..=0xfeff => panic!("invalid address"),
+            0xfea0..=0xfeff => println!("Writing to empty but unusable for I/O"),
             0xff00 => self.joypad = val,
             0xff01 => self.serial_transfer_data = val,
             0xff02 => self.serial_transer_control = val,
@@ -92,12 +103,12 @@ impl MemoryType for Memory {
             0xff06 => self.timer_modulo = val,
             0xff07 => self.timer_control = val,
             0xff0f => self.interupt_flag = val,
-            0xff10..=0xff3f => {} // TODO: SOUND
+            0xff10..=0xff3f => self.snd.write_byte(addr, val),
             0xff40..=0xff4b => self.gpu.write_byte(addr, val),
+            0xff4c..=0xff7f => println!("Writing to empty but unusable for I/O"),
             0xff80..=0xfffe => self.mmu.write_byte(addr, val),
-            0xff4c..=0xfffe => panic!("invalid"),
             0xffff => self.interupt_enable = val,
-            _ => panic!("{}", addr),
+            _ => println!("unused {}", addr),
         }
     }
 }
@@ -108,6 +119,7 @@ impl Memory {
             mbc: Mbc::new(),
             mmu: Mmu::new(),
             gpu: Gpu::new(),
+            snd: Sound::new(),
             interupt_enable: 0,
             interupt_flag: 0,
             joypad: 0,
