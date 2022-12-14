@@ -8,5 +8,7 @@ mod tests {
         let mut memory = Memory::new();
         memory.reset();
         assert_eq!(memory.gpu.mode(),TickMode::HBLANK);
+
+        
     }
 }

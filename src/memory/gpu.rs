@@ -117,7 +117,7 @@ impl MemoryType for Gpu {
         match addr {
             0x8000..=0x9fff => {
                 self.vram[(addr & 0x1fff) as usize] = val;
-                if (addr & 0x1fff) < 384{
+                if (addr & 0x1fff) < 384 {
                     self.update_tile_data(addr, val);
                 }
             }
@@ -185,14 +185,14 @@ impl Gpu {
     fn set_mode(&mut self, val: TickMode) {
         let old = self.mode();
         if old != val {
-            self.lcdc_stat = (self.lcdc_stat & !0x3)| (val as u8);
+            self.lcdc_stat = (self.lcdc_stat & !0x3) | (val as u8);
         }
     }
     pub fn mode(&self) -> TickMode {
         TickMode::from_val(self.lcdc_stat & 0x3)
     }
     fn update_tile_data(&mut self, addr: u16, val: u8) {
-        let mut write_addr = addr & 0x1FFF;
+        let mut write_addr = addr & 0x1fff;
         if addr & 1 == 1 {
             write_addr -= 1;
         } //Because each line is represented as 2 lines, start with the first one
@@ -229,15 +229,17 @@ impl Gpu {
         }
     }
     fn update_palette(&mut self, pal: PaletteType, val: u8) {
-        let mut palette = match pal {
-            PaletteType::Background => self.background_palette,
-            PaletteType::Object0 => self.object_palette0,
-            PaletteType::Object1 => self.object_palette1,
-        };
-        println!("updating palette: {0:?} to {1:#04b}", pal, val);
+        let mut palette = [0; 4];
+        //println!("updating palette: {0:?} to {1:#04b}", pal, val);
         for i in 0..4 {
-            palette[i] = (val >> (i * 2)) & 0b11;
+            let new_color = (val >> (i * 2)) & 0b11;
+            palette[i] = new_color;
         }
+        match pal {
+            PaletteType::Background => self.background_palette = palette,
+            PaletteType::Object0 => self.object_palette0 = palette,
+            PaletteType::Object1 => self.object_palette1 = palette,
+        };
     }
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
@@ -246,7 +248,7 @@ impl Gpu {
                 let color = match self.pixels[x + video::SCREEN_WIDTH * y] {
                     0 => WHITE,
                     1 => LIGHT_GRAY,
-                    2 => DARK_GRAY,
+                    2 => DARK_GRAY, 
                     3 => BLACK,
                     _ => panic!("lol"),
                 };
@@ -337,16 +339,16 @@ impl Gpu {
         }
 
         // VRAM offset for the tile map
-        let mut map_offs: u32 = 0x1800;
+        let mut map_offs: u16 = 0x1800;
         if self.lcdc & 0x8 == 0x8 {
             map_offs = 0x1C00
         }
 
         // Which line of tiles to use in the map
-        map_offs += ((self.vert_line as u32 + self.scroll_y as u32) & 255) >> 3;
+        map_offs += ((self.vert_line + self.scroll_y) & 255) as u16 >> 3;
 
         // Which tile to start with in the map line
-        let mut lineoffs: u32 = (self.scroll_x >> 3) as u32;
+        let mut lineoffs: u16 = (self.scroll_x >> 3) as u16;
 
         // Which line of pixels to use in the tiles
         let y = ((self.vert_line + self.scroll_y) & 7) as usize;
@@ -357,7 +359,7 @@ impl Gpu {
         let mut canvasoffs: u32 = (self.vert_line as usize * video::SCREEN_WIDTH) as u32;
 
         // Read tile index from the background map
-        let mut tile: u32 = self.vram[(map_offs + lineoffs) as usize] as u32;
+        let mut tile = self.vram[(map_offs + lineoffs) as usize] as u16;
 
         // If the tile data set in use is #1, the
         // indices are signed; calculate a real tile offset
@@ -371,6 +373,7 @@ impl Gpu {
 
             // Plot the pixel to canvas
             self.pixels[map_offs as usize] = pal_color;
+
             canvasoffs += 1;
 
             // When this tile ends, read another
@@ -378,9 +381,9 @@ impl Gpu {
             if x == 8 {
                 x = 0;
                 lineoffs = (lineoffs + 1) & 31;
-                tile = self.vram[(map_offs + lineoffs) as usize] as u32;
+                tile = self.vram[(map_offs + lineoffs) as usize] as u16;
                 if lcdl_4_set && tile < 128 {
-                    tile = tile.wrapping_add(256);
+                    tile += 256;
                 }
             }
         });

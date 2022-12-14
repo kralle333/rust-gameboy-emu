@@ -1,6 +1,6 @@
 use crate::memory::{self, MemoryType};
 
-use super::{helpers::Instruction, Cpu};
+use super::{Cpu, Instruction};
 
 impl Cpu {
     pub fn execute_cb(&mut self, opcode: u8, mem: &mut memory::Memory) -> Instruction {

@@ -1,15 +1,18 @@
-#[cfg(test)]
-mod cpu_test;
 mod execute;
 mod execute_cb;
 mod helpers;
 mod helpers_cb;
+mod cpu_test;
 
 use std::ops::{Shl, Shr};
 
 use crate::memory::{self, MemoryType};
 
-use self::helpers::Instruction;
+pub enum Instruction {
+    Ok(u8, u16, u32, &'static str),
+    Invalid(u8),
+}
+
 
 #[allow(non_snake_case)]
 pub struct Cpu {

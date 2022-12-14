@@ -2,10 +2,6 @@ use crate::memory::{self, Memory, MemoryType};
 
 use super::{Cpu, Flag, Register};
 
-pub enum Instruction {
-    Ok(u8, u16, u32, &'static str),
-    Invalid(u8),
-}
 
 impl Cpu {
     pub fn get_n(&self, mem: &mut memory::Memory) -> u8 {

@@ -3,7 +3,7 @@ mod tests {
     use rand::Rng;
 
     use crate::{
-        cpu::{self, helpers::Instruction, Cpu, Flag, Register},
+        cpu::{self, Cpu, Flag, Register},
         memory::{self, Memory, MemoryType},
     };
 
@@ -340,5 +340,21 @@ mod tests {
         let v = c.pop_sp(&mem);
 
         assert_eq!(v, 0x1234);
+    }
+    #[test]
+    fn test_hl_plus_minus() {
+        let mut t = Tester::new();
+        t.cpu.HL = 0x1000;
+        t.cpu.set_a(0x66);
+
+        t.run(0x22);
+        assert_eq!(0x66, t.mem.read_byte(0x1000));
+        assert_eq!(t.cpu.HL, 0x1001);
+
+        t.cpu.HL = 0x2000;
+        t.cpu.set_a(0x69);
+        t.run(0x32);
+        assert_eq!(0x69, t.mem.read_byte(0x2000));
+        assert_eq!(t.cpu.HL, 0x1fff);
     }
 }

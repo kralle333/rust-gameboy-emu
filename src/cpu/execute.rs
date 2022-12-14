@@ -1,9 +1,8 @@
 use std::ops::{Shl, Shr};
 
 use crate::memory::{self, MemoryType};
-use helpers::Instruction;
 
-use super::{helpers, Cpu, Flag, Register};
+use super::{Cpu, Flag, Register, Instruction};
 
 impl Cpu {
     pub fn execute(&mut self, opcode: u8, mem: &mut memory::Memory) -> Instruction {
@@ -235,7 +234,7 @@ impl Cpu {
             0x32 => {
                 mem.write_byte(self.HL, self.get_a());
                 self.HL -= 1;
-                Instruction::Ok(opcode, 1, 8, "LD (HL+),A")
+                Instruction::Ok(opcode, 1, 8, "LD (HL-),A")
             }
             0x33 => {
                 self.SP = self.SP.wrapping_add(1);
