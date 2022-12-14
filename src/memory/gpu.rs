@@ -3,6 +3,31 @@ use sdl2::{pixels::Color, rect::Rect, render::Canvas, video::Window};
 use super::MemoryType;
 use crate::video::{self, SCREEN_WIDTH};
 
+const WHITE: Color = Color::RGBA(0x9C, 0xBD, 0x0F, 0xFF);
+const LIGHT_GRAY: Color = Color::RGBA(0x8C, 0xAD, 0x0F, 0xFF);
+const DARK_GRAY: Color = Color::RGBA(0x30, 0x62, 0x30, 0xFF);
+const BLACK: Color = Color::RGBA(0x0F, 0x38, 0x0F, 0xFF);
+
+#[derive(Debug, PartialEq)]
+pub enum TickMode {
+    HBLANK = 0x00,
+    VBLANK = 0x01,
+    OAM = 0x10,
+    OAMVRAM = 0x11,
+}
+
+impl TickMode {
+    fn from_val(val: u8) -> TickMode {
+        match val {
+            0x00 => TickMode::HBLANK,
+            0x01 => TickMode::VBLANK,
+            0x10 => TickMode::OAM,
+            0x11 => TickMode::OAMVRAM,
+            _ => TickMode::HBLANK,
+        }
+    }
+}
+
 type ColorByte = u8;
 type Tile16 = [[ColorByte; 8]; 8];
 
@@ -12,13 +37,13 @@ fn make_tile16() -> Tile16 {
 
 #[derive(Clone, Copy)]
 struct ObjData {
-    x: i32,
-    y: i32,
-    pattern_num: i32,
-    priority: i32,
-    y_flip: i32,
-    x_flip: i32,
-    pal_num: i32,
+    x: u8,
+    y: u8,
+    pattern_num: u8,
+    priority: bool,
+    y_flip: bool,
+    x_flip: bool,
+    pal_num: bool,
 }
 
 impl ObjData {
@@ -27,21 +52,26 @@ impl ObjData {
             x: 0,
             y: 0,
             pattern_num: 0,
-            priority: 0,
-            y_flip: 0,
-            x_flip: 0,
-            pal_num: 0,
+            priority: false,
+            y_flip: false,
+            x_flip: false,
+            pal_num: false,
         }
     }
 }
 
+#[derive(Debug)]
+enum PaletteType {
+    Background,
+    Object0,
+    Object1,
+}
 pub struct Gpu {
     vram: [u8; 0x2000],
     objects: [ObjData; 40],
     oam: [u8; 0xA0],
     bg_tiles: [Tile16; 384],
     clock: u32,
-    mode: i32,
     //Video registers
     lcdc: u8,                           //FF40
     lcdc_stat: u8,                      //FF41
@@ -85,18 +115,36 @@ impl MemoryType for Gpu {
 
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
-            0x8000..=0x9fff => self.vram[(addr & 0x1fff) as usize] = val,
-            0xfe00..=0xfea0 => self.oam[(addr & 160) as usize] = val,
+            0x8000..=0x9fff => {
+                self.vram[(addr & 0x1fff) as usize] = val;
+                self.update_tile_data(addr, val);
+            }
+            0xfe00..=0xfea0 => {
+                self.oam[(addr & 160) as usize] = val;
+                self.update_object_data(addr, val);
+            }
             0xff40..=0xff4b => match addr & 0x00FF {
                 0x40 => self.lcdc = val,
-                0x41 => self.lcdc_stat = val,
+                0x41 => {
+                    self.lcdc_stat = val & 0xFC;
+                    self.set_mode(TickMode::from_val(val & 0x3));
+                }
                 0x42 => self.scroll_y = val,
                 0x43 => self.scroll_x = val,
                 0x44 => self.vert_line = val,
                 0x45 => self.vert_line_cp = val,
-                0x47 => self.bg_palette = val,
-                0x48 => self.obj_palette0 = val,
-                0x49 => self.obj_palette1 = val,
+                0x47 => {
+                    self.bg_palette = val;
+                    self.update_palette(PaletteType::Background, val);
+                }
+                0x48 => {
+                    self.obj_palette0 = val;
+                    self.update_palette(PaletteType::Object0, val)
+                }
+                0x49 => {
+                    self.obj_palette1 = val;
+                    self.update_palette(PaletteType::Object1, val)
+                }
                 0x4a => self.window_x = val,
                 0x4b => self.window_y = val,
                 _ => panic!("video flags"),
@@ -129,7 +177,67 @@ impl Gpu {
             object_palette0: [0; 4],
             object_palette1: [0; 4],
             clock: 0,
-            mode: 0,
+        }
+    }
+
+    fn set_mode(&mut self, val: TickMode) {
+        let old = self.mode();
+        if old != val {
+            println!("setting mode from {:?} to {:?}", old, val);
+        }
+        self.lcdc_stat = (self.lcdc_stat & !0x3) | val as u8;
+
+        println!(":?",mode)
+    }
+    pub fn mode(&self) -> TickMode {
+        TickMode::from_val(self.lcdc_stat & 0x3)
+    }
+    fn update_tile_data(&mut self, addr: u16, val: u8) {
+        let mut write_addr = addr & 0x1FFF;
+        if addr & 1 == 0 {
+            write_addr -= 1;
+        } //Because each line is represented as 2 lines, start with the first one
+        let tile = write_addr >> 4; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
+
+        let y = (write_addr >> 1) & 7; //
+        let mut sx;
+        let mut bit_value1 = 0;
+        let mut bit_value2 = 0;
+        for x in 0..8 {
+            sx = 1 << (7 - x);
+            if (self.vram[write_addr as usize] & sx) > 0 {
+                bit_value1 = 1;
+            }
+            if (self.vram[(write_addr + 1) as usize] & sx) > 0 {
+                bit_value2 = 2;
+            }
+            self.bg_tiles[tile as usize][y as usize][x as usize] = bit_value1 + bit_value2;
+        }
+    }
+    fn update_object_data(&mut self, addr: u16, val: u8) {
+        let obj = ((addr & 0x00FF) >> 2) as usize; //Get F9 bits, divide with 4 to get obj correct id
+        match addr & 3 {
+            0 => self.objects[obj].y = val,
+            1 => self.objects[obj].x = val,
+            2 => self.objects[obj].pattern_num = val,
+            3 => {
+                self.objects[obj].priority = (val & (1 << 7)) > 0;
+                self.objects[obj].y_flip = (val & (1 << 6)) > 0;
+                self.objects[obj].x_flip = (val & (1 << 5)) > 0;
+                self.objects[obj].pal_num = (val & (1 << 4)) > 0;
+            }
+            _ => panic!("impossible"),
+        }
+    }
+    fn update_palette(&mut self, pal: PaletteType, val: u8) {
+        let mut palette = match pal {
+            PaletteType::Background => self.background_palette,
+            PaletteType::Object0 => self.object_palette0,
+            PaletteType::Object1 => self.object_palette1,
+        };
+        println!("updating palette: {0:?} to {1:#04b}", pal, val);
+        for i in 0..4 {
+            palette[i] = (val >> (i * 2)) & 0b11;
         }
     }
 
@@ -137,10 +245,10 @@ impl Gpu {
         for x in 0..video::SCREEN_WIDTH - 1 {
             for y in 0..video::SCREEN_HEIGHT - 1 {
                 let color = match self.pixels[x + video::SCREEN_WIDTH * y] {
-                    0 => Color::RGBA(0x9C, 0xBD, 0x0F, 0xFF),
-                    1 => Color::RGBA(0x8C, 0xAD, 0x0F, 0xFF),
-                    2 => Color::RGBA(0x30, 0x62, 0x30, 0xFF),
-                    3 => Color::RGBA(0x0F, 0x38, 0x0F, 0xFF),
+                    0 => WHITE,
+                    1 => LIGHT_GRAY,
+                    2 => DARK_GRAY,
+                    3 => BLACK,
                     _ => panic!("lol"),
                 };
 
@@ -164,70 +272,64 @@ impl Gpu {
         let mut interrupts: u8 = 0;
         self.clock += clock_t;
         if self.vert_line == self.vert_line_cp {
-            self.lcdc_stat = (self.lcdc_stat & 0xFC) | 0x1; // lcdc modeflag: 01
+            self.lcdc_stat = self.lcdc_stat | 0x4; //LYC = LCDC LY
             if (self.lcdc_stat & (1 << 6)) > 0 {
+                //TODO: check this
                 interrupts |= 0x2;
             }
         } else {
-            self.lcdc_stat = self.lcdc_stat & 0xFC; // lcdc modeflag: 00
+            self.lcdc_stat = self.lcdc_stat & !0x4; // LYC not equal to LCDC LY
         }
-        match self.mode {
+
+        match self.mode() {
             //OAM read
-            2 => {
-                if self.clock >= 80 {
-                    self.clock = 0;
-                    self.mode = 3;
-                }
+            TickMode::OAM if self.clock >= 80 => {
+                self.clock = 0;
+                println!("OAM->OAM AND VRAM");
+                self.set_mode(TickMode::OAMVRAM);
             }
             //OAM and VRAM reading
-            3 => {
-                if self.clock >= 172 {
-                    self.clock = 0;
-                    self.mode = 0;
-                    self.render_screen();
-                    if self.lcdc_stat & (1 << 3) > 0 {
+            TickMode::OAMVRAM if self.clock >= 172 => {
+                self.clock = 0;
+                self.set_mode(TickMode::HBLANK);
+                println!("rendering");
+                self.render_screen();
+                if self.lcdc_stat & (1 << 3) > 0 {
+                    interrupts |= 0x2;
+                }
+            }
+            //HBlank
+            TickMode::HBLANK if self.clock >= 204 => {
+                self.clock = 0;
+                self.vert_line += 1;
+                if self.vert_line == 143 {
+                    self.set_mode(TickMode::VBLANK);
+                    //justDrew = true; //TODO: what is this
+                    if self.lcdc_stat & (1 << 4) > 0 {
+                        interrupts |= 0x2;
+                    }
+                    interrupts |= 0x1;
+                    //WriteTileDataToFile("../tiledata.txt");
+                    //WriteTileMapToFile("../tilemap.txt");
+                } else {
+                    self.set_mode(TickMode::OAM);
+                    if self.lcdc_stat & (1 << 5) > 0 {
                         interrupts |= 0x2;
                     }
                 }
             }
-
-            //HBlank
-            0 => {
-                if self.clock >= 204 {
-                    self.clock = 0;
-                    self.vert_line += 1;
-                    if self.vert_line == 143 {
-                        self.mode = 1;
-                        //justDrew = true; //TODO: what is this
-                        if self.lcdc_stat & (1 << 4) > 0 {
-                            interrupts |= 0x2;
-                        }
-                        interrupts |= 0x1;
-                        //WriteTileDataToFile("../tiledata.txt");
-                        //WriteTileMapToFile("../tilemap.txt");
-                    } else {
-                        self.mode = 2;
-                        if self.lcdc_stat & (1 << 5) > 0 {
-                            interrupts |= 0x2;
-                        }
-                    }
-                }
-            }
-
             //VBlank
-            1 => {
-                //justDrew = false; //TODO: figure out
-                if self.clock >= 456 {
-                    self.vert_line += 1;
-                    self.clock = 0;
-                    if self.vert_line > 153 {
-                        self.mode = 2;
-                        self.vert_line = 0;
-                    }
+            TickMode::VBLANK if self.clock >= 456 => {
+                self.vert_line += 1;
+                self.clock = 0;
+                if self.vert_line > 153 {
+                    self.set_mode(TickMode::OAM);
+                    self.vert_line = 0;
                 }
             }
-            _ => panic!("what"),
+            TickMode::HBLANK | TickMode::VBLANK | TickMode::OAM | TickMode::OAMVRAM => {}
         }
+
         interrupts
     }
 

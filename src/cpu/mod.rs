@@ -203,7 +203,7 @@ impl Cpu {
             Instruction::Ok(opcode, length, clocks, description) => {
                 self.set_clocks(0, clocks);
                 self.PC = self.PC.wrapping_add(length);
-                println!("{0:010}: {1:#06x} - {2}", description, opcode, regs);
+                //println!("{0:010}: {1:#06x} - {2}", description, opcode, regs);
             }
             Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),
         }

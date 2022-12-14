@@ -51,8 +51,12 @@ impl Input {
 
     fn set_button(&mut self, key: Option<Keycode>, is_down: bool) {
         let k = key.unwrap();
-        let b = *self.mapping.get(&k).unwrap();
-        self.key_states.insert(b, is_down);
+        match self.mapping.get(&k) {
+            Some(b) => {
+                self.key_states.insert(*b, is_down);
+            }
+            None => {}
+        }
     }
 
     pub fn consume_keys(&mut self, event: Event) {

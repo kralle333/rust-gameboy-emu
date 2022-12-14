@@ -1,13 +1,13 @@
 mod gpu;
+mod gpu_test;
 mod mbc;
 mod mem_test;
 mod mmu;
 
-use std::ops::{Shl, Shr};
+use std::ops::Shl;
 
 use sdl2::{render::Canvas, video::Window};
 
-use crate::cpu::Cpu;
 
 use self::{gpu::Gpu, mbc::Mbc, mmu::Mmu};
 
