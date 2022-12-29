@@ -24,8 +24,8 @@ impl Emulator {
         self.memory.load(result);
     }
 
-    pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
-        self.memory.draw(canvas);
+    pub fn draw(&mut self, canvas: &mut Canvas<Window>)->bool {
+        return self.memory.draw(canvas);
     }
 
     pub fn reset(&mut self){

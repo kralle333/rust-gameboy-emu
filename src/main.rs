@@ -38,8 +38,9 @@ pub fn main() {
 
         emulator.tick(&input);
         canvas.clear();
-        emulator.draw(&mut canvas);
-        canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 300));
+        if emulator.draw(&mut canvas){
+            canvas.present();
+        }
+        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 300));
     }
 }

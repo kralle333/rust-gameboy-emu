@@ -3,7 +3,7 @@ mod tests {
     use rand::Rng;
 
     use crate::{
-        cpu::{self, Cpu, Flag, Register},
+        cpu::{self, Cpu, Flag, Register, Instruction},
         memory::{self, Memory, MemoryType},
     };
 

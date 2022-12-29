@@ -190,6 +190,7 @@ impl Cpu {
     }
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
+
         let opcode = mem.read_byte(self.PC);
         let regs = self.registers_str(&mem);
         let (opcode_type, r) = match opcode {
@@ -197,15 +198,15 @@ impl Cpu {
             _ => (Opcode::Normal, self.execute(opcode, mem)),
         };
 
-        self.handle_execute(opcode_type, r, regs);
+        self.handle_execute(opcode_type, &r, &regs);
         self.check_interrupt_status(mem, opcode);
     }
 
-    fn handle_execute(&mut self, opcode_type: Opcode, result: Instruction, regs: String) {
+    fn handle_execute(&mut self, opcode_type: Opcode, result: &Instruction, regs: &str) {
         match result {
             Instruction::Ok(opcode, length, clocks, description) => {
-                self.set_clocks(0, clocks);
-                self.PC = self.PC.wrapping_add(length);
+                self.set_clocks(0, *clocks);
+                self.PC = self.PC.wrapping_add(*length);
                 //println!("{0:010}: {1:#06x} - {2}", description, opcode, regs);
             }
             Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),

@@ -72,6 +72,7 @@ pub struct Gpu {
     oam: [u8; 0xA0],
     bg_tiles: [Tile16; 384],
     clock: u32,
+    can_draw: bool,
     //Video registers
     lcdc: u8,                           //FF40
     lcdc_stat: u8,                      //FF41
@@ -163,6 +164,7 @@ impl Gpu {
             vram: [0; 0x2000],
             oam: [0; 0xA0],
             bg_tiles: [make_tile16(); 384],
+            can_draw: false,
             lcdc: 0x91,
             lcdc_stat: 0,
             scroll_x: 0,
@@ -242,15 +244,19 @@ impl Gpu {
         };
     }
 
-    pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
+    pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
+        if !self.can_draw {
+            return false;
+        }
+        self.can_draw = false;
         for x in 0..video::SCREEN_WIDTH - 1 {
             for y in 0..video::SCREEN_HEIGHT - 1 {
                 let color = match self.pixels[x + video::SCREEN_WIDTH * y] {
                     0 => WHITE,
                     1 => LIGHT_GRAY,
-                    2 => DARK_GRAY, 
+                    2 => DARK_GRAY,
                     3 => BLACK,
-                    _ => panic!("lol"),
+                    _ => panic!("color unknown"),
                 };
 
                 canvas.set_draw_color(color);
@@ -267,6 +273,7 @@ impl Gpu {
                 }
             }
         }
+        return true;
     }
 
     pub fn tick(&mut self, clock_t: u32) -> u8 {
@@ -303,7 +310,7 @@ impl Gpu {
                 self.vert_line += 1;
                 if self.vert_line == 143 {
                     self.set_mode(TickMode::VBLANK);
-                    //justDrew = true; //TODO: what is this
+                    self.can_draw = true;
                     if self.lcdc_stat & (1 << 4) > 0 {
                         interrupts |= 0x2;
                     }
@@ -363,7 +370,7 @@ impl Gpu {
 
         // If the tile data set in use is #1, the
         // indices are signed; calculate a real tile offset
-        let lcdl_4_set = self.lcdc & 0x10 == 0x10;
+        let lcdl_4_set = (self.lcdc & 0x10) == 0x10;
         if lcdl_4_set && tile < 128 {
             tile = tile.wrapping_add(0xff);
         }
@@ -372,7 +379,7 @@ impl Gpu {
             let pal_color = self.background_palette[self.bg_tiles[tile as usize][y][x] as usize];
 
             // Plot the pixel to canvas
-            self.pixels[map_offs as usize] = pal_color;
+            self.pixels[canvasoffs as usize] = pal_color;
 
             canvasoffs += 1;
 

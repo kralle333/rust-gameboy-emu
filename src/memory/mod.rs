@@ -173,7 +173,7 @@ impl Memory {
         self.write_byte(0xFFFF, 0x00); //IE
         self.write_byte(0xFF0F, 0xE1); //IF
     }
-    pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
+    pub fn draw(&mut self, canvas: &mut Canvas<Window>)->bool{
         self.gpu.draw(canvas)
     }
     pub fn tick(&mut self, clock_t: u32) {
