@@ -65,7 +65,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 4, "DEC C")
             }
             0x0e => {
-                self.set_d(self.get_n(mem));
+                self.set_c(self.get_n(mem));
                 Instruction::Ok(opcode, 2, 8, "LD C,d8")
             }
             0x0f => {

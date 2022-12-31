@@ -138,7 +138,7 @@ impl MemoryType for Sound {
             0xff24 => self.channel_control = val,
             0xff25 => self.output_terminal_selection = val,
             0xff26 => self.on_off = val & 0xF0, // Bits 0 - 3 of this register are meant to be status bits to be read.
-            0xff30..=0xff3f => self.wave_pattern_ram[(addr & 0xF) as usize] = val,
+            0xff30..=0xff3f => self.wave_pattern_ram[(addr & 0xE) as usize] = val,
             _ => println!("[Sound]: wrote to unused addresses of sound"),
         }
     }

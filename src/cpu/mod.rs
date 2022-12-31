@@ -1,10 +1,10 @@
+mod cpu_test;
 mod execute;
 mod execute_cb;
 mod helpers;
 mod helpers_cb;
-mod cpu_test;
 
-use std::ops::{Shl, Shr};
+use std::{ops::{Shl, Shr}, fmt::format};
 
 use crate::memory::{self, MemoryType};
 
@@ -12,7 +12,6 @@ pub enum Instruction {
     Ok(u8, u16, u32, &'static str),
     Invalid(u8),
 }
-
 
 #[allow(non_snake_case)]
 pub struct Cpu {
@@ -41,6 +40,7 @@ pub enum Register {
     E,
     H,
     L,
+    F,
 }
 
 enum Flag {
@@ -93,6 +93,9 @@ impl Cpu {
     fn get_a(&self) -> u8 {
         Self::get_upper(self.AF)
     }
+    fn get_f(&self) -> u8 {
+        Self::get_lower(self.AF)
+    }
     fn get_b(&self) -> u8 {
         Self::get_upper(self.BC)
     }
@@ -115,6 +118,7 @@ impl Cpu {
     fn set_reg(&mut self, register: Register, val: u8) {
         match register {
             Register::A => self.set_a(val),
+            Register::F => self.set_f(val),
             Register::B => self.set_b(val),
             Register::C => self.set_c(val),
             Register::D => self.set_d(val),
@@ -126,6 +130,7 @@ impl Cpu {
     fn get_reg(&self, register: Register) -> u8 {
         match register {
             Register::A => self.get_a(),
+            Register::F => self.get_f(),
             Register::B => self.get_b(),
             Register::C => self.get_c(),
             Register::D => self.get_d(),
@@ -148,6 +153,9 @@ impl Cpu {
     }
     fn set_a(&mut self, val: u8) {
         self.AF = Self::set_upper(self.AF, val);
+    }
+    fn set_f(&mut self, val: u8) {
+        self.AF = Self::set_lower(self.AF, val);
     }
     fn set_b(&mut self, val: u8) {
         self.BC = Self::set_upper(self.BC, val);
@@ -190,7 +198,6 @@ impl Cpu {
     }
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
-
         let opcode = mem.read_byte(self.PC);
         let regs = self.registers_str(&mem);
         let (opcode_type, r) = match opcode {
@@ -207,7 +214,7 @@ impl Cpu {
             Instruction::Ok(opcode, length, clocks, description) => {
                 self.set_clocks(0, *clocks);
                 self.PC = self.PC.wrapping_add(*length);
-                //println!("{0:010}: {1:#06x} - {2}", description, opcode, regs);
+                //println!("{0:010}|op:{1} {2}", description, Self::clean_hex_8(*opcode), regs);
             }
             Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),
         }
@@ -250,10 +257,28 @@ impl Cpu {
         }
     }
 
-    pub(crate) fn registers_str(&self, mem: &memory::Memory) -> String {
-        format!(
-            "PC:{0:#06x} SP: {1:#06x} AF: {2:#06x} BC: {3:#06x} DE: {4:#06x} HL: {5:#06x} a16: {6:#06x}",
-            self.PC, self.SP, self.AF, self.BC, self.DE, self.HL,self.get_nn(mem)
-        )
+    fn clean_hex_8(v: u8) -> String {
+        format!("{0:#04x}", v).replace("0x", "")
+    }
+    fn clean_hex_16(v: u16) -> String {
+        format!("{0:#06x}", v).replace("0x", "")
+    }
+    fn clean_b_8(v:u8) -> String{
+        format!("{0:#06b}", v>>4).replace("0b", "")
+    }
+    fn registers_str(&self, mem: &memory::Memory) -> String {
+        let mut s = String::from("");
+        s = format!("PC:{0}",Self::clean_hex_16(self.PC));
+        s = format!("{s} SP:{0}",Self::clean_hex_16(self.SP));
+        s = format!("{s} A:{0}",Self::clean_hex_8(self.get_a()));
+        s = format!("{s} F:{0}",Self::clean_b_8((self.AF & 0xFF) as u8));
+        s = format!("{s} B:{0}",Self::clean_hex_8(self.get_b()));
+        s = format!("{s} C:{0}",Self::clean_hex_8(self.get_c()));
+        s = format!("{s} D:{0}",Self::clean_hex_8(self.get_d()));
+        s = format!("{s} E:{0}",Self::clean_hex_8(self.get_e()));
+        s = format!("{s} H:{0}",Self::clean_hex_8(self.get_h()));
+        s = format!("{s} L:{0}",Self::clean_hex_8(self.get_l()));
+        s = format!("{s} nn:{0}",Self::clean_hex_16(self.get_nn(mem)));
+        s
     }
 }

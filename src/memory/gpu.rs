@@ -80,6 +80,7 @@ pub struct Gpu {
     scroll_y: u8,                       //FF43
     vert_line: u8,                      //FF44
     vert_line_cp: u8,                   //FF45
+    dma_write_addr: u8,                 //FF46
     window_y: u8,                       //FF4A
     window_x: u8,                       //FF4B
     bg_palette: u8,                     //FF47,
@@ -116,11 +117,12 @@ impl MemoryType for Gpu {
 
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
-            0x8000..=0x9fff => {
+            0x8000..=0x97ff => {
                 self.vram[(addr & 0x1fff) as usize] = val;
-                if (addr & 0x1fff) < 384 {
-                    self.update_tile_data(addr, val);
-                }
+                self.update_tile_data(addr);
+            }
+            0x9800..=0x9fff => {
+                self.vram[(addr & 0x1fff) as usize] = val;
             }
             0xfe00..=0xfea0 => {
                 self.oam[(addr & 160) as usize] = val;
@@ -136,6 +138,7 @@ impl MemoryType for Gpu {
                 0x43 => self.scroll_x = val,
                 0x44 => self.vert_line = val,
                 0x45 => self.vert_line_cp = val,
+                0x46 => self.dma_write_addr = val,
                 0x47 => {
                     self.bg_palette = val;
                     self.update_palette(PaletteType::Background, val);
@@ -176,6 +179,7 @@ impl Gpu {
             bg_palette: 0,
             obj_palette0: 0,
             obj_palette1: 0,
+            dma_write_addr:0,
             pixels: [0; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
             background_palette: [0; 4],
             object_palette0: [0; 4],
@@ -193,12 +197,12 @@ impl Gpu {
     pub fn mode(&self) -> TickMode {
         TickMode::from_val(self.lcdc_stat & 0x3)
     }
-    fn update_tile_data(&mut self, addr: u16, val: u8) {
+    fn update_tile_data(&mut self, addr: u16) {
         let mut write_addr = addr & 0x1fff;
         if addr & 1 == 1 {
             write_addr -= 1;
         } //Because each line is represented as 2 lines, start with the first one
-        let tile = write_addr >> 4; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
+        let tile = (write_addr >> 4) & 511; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
 
         let y = (write_addr >> 1) & 7; //
         let mut sx;

@@ -2,7 +2,6 @@ use crate::memory::{self, Memory, MemoryType};
 
 use super::{Cpu, Flag, Register};
 
-
 impl Cpu {
     pub fn get_n(&self, mem: &mut memory::Memory) -> u8 {
         mem.read_byte(self.PC + 1)
@@ -39,12 +38,13 @@ impl Cpu {
     }
     pub fn sub_a(&mut self, b: u8) {
         let a = self.get_a();
-        let (new_a, borrow) = Self::borrow_sub(b, a);
+        let (new_a, borrow) = Self::borrow_sub(a, b);
+
         self.set_a(new_a);
         self.set_flag(Flag::Z, new_a == 0);
         self.set_flag(Flag::N, true);
-        self.set_flag(Flag::H, !Self::is_half_borrowing_sub(b, a));
-        self.set_flag(Flag::C, !borrow);
+        self.set_flag(Flag::H, Self::is_half_borrowing_sub(a, b));
+        self.set_flag(Flag::C, borrow);
     }
     pub fn sbc_a(&mut self, b: u8) {
         self.sub_a(b + self.get_flag(Flag::C) as u8);

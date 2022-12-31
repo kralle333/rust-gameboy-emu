@@ -3,7 +3,7 @@ mod tests {
     use rand::Rng;
 
     use crate::{
-        cpu::{self, Cpu, Flag, Register, Instruction},
+        cpu::{self, Cpu, Flag, Instruction, Register},
         memory::{self, Memory, MemoryType},
     };
 
@@ -36,7 +36,9 @@ mod tests {
             self.cpu.PC = 0x0000;
             self.cpu.fetch_decode(&mut self.mem);
         }
-
+        fn assert_eq_flag(&self, flag: Flag, set: bool) {
+            assert_eq!(self.cpu.get_flag(flag), set)
+        }
         fn assert_eq_reg(&self, a: Register, b: Register) {
             assert_eq!(self.cpu.get_reg(a), self.cpu.get_reg(b))
         }
@@ -116,6 +118,35 @@ mod tests {
         .iter()
         .copied();
         registers
+    }
+
+    #[test]
+    fn set_flags() {
+        let mut t = Tester::new();
+        t.cpu.AF = 0;
+        t.cpu.set_flag(Flag::Z, false);
+        assert_eq!(t.cpu.get_f(), 0b0);
+        t.cpu.set_flag(Flag::N, true);
+        assert_eq!(t.cpu.get_f(), 0b01000000);
+        t.cpu.set_flag(Flag::H, false);
+        assert_eq!(t.cpu.get_f(), 0b01000000);
+        t.cpu.set_flag(Flag::C, true);
+        assert_eq!(t.cpu.get_f(), 0b01010000);
+    }
+
+    #[test]
+    fn test_half_carry() {
+        let mut t = Tester::new();
+
+        t.cpu.AF = 0;
+        t.cpu.set_b(0x90);
+        t.cpu.cp_a(t.cpu.get_b());
+        println!("t.cpu.get_f(): {}",t.cpu.get_f());
+        t.assert_eq_flag(Flag::Z, false);
+        t.assert_eq_flag(Flag::N, true);
+        t.assert_eq_flag(Flag::H, false);
+        t.assert_eq_flag(Flag::C, true);
+        assert_eq!(t.cpu.get_f(), 0b0101_0000);
     }
 
     #[test]
