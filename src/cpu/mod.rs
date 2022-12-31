@@ -4,7 +4,7 @@ mod execute_cb;
 mod helpers;
 mod helpers_cb;
 
-use std::{ops::{Shl, Shr}, fmt::format};
+use std::ops::{Shl, Shr};
 
 use crate::memory::{self, MemoryType};
 
@@ -29,6 +29,9 @@ pub struct Cpu {
     EI: bool,
     clock_m: u8,
     clock_t: u32,
+
+    last_instruction: Instruction,
+    last_regs: String,
 }
 
 #[derive(Clone, Copy)]
@@ -79,6 +82,8 @@ impl Cpu {
             HALT: false,
             DI: false,
             EI: false,
+            last_instruction: Instruction::Invalid(0x0),
+            last_regs: "".to_string(),
         }
     }
 
@@ -86,8 +91,27 @@ impl Cpu {
         self.fetch_decode(mem)
     }
 
+    pub fn print(&self) {
+        match self.last_instruction {
+            Instruction::Ok(opcode, _, _, description) => {
+                println!(
+                    "{0:010}|op:{1} {2}",
+                    description,
+                    Self::clean_hex_8(opcode),
+                    self.last_regs,
+                );
+            }
+            Instruction::Invalid(opcode) => {
+                println!("invalid opcode! {opcode:#06x}");
+            }
+        }
+    }
+
     pub fn get_clock_t(&self) -> u32 {
         self.clock_t
+    }
+    pub fn PC(&self) -> u16 {
+        self.PC
     }
 
     fn get_a(&self) -> u8 {
@@ -196,29 +220,25 @@ impl Cpu {
         self.clock_m = m;
         self.clock_t = t;
     }
+    fn opcode_to_type(opcode: u8) {}
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         let opcode = mem.read_byte(self.PC);
-        let regs = self.registers_str(&mem);
-        let (opcode_type, r) = match opcode {
-            0xcb => (Opcode::CB, self.execute_cb(opcode, mem)),
-            _ => (Opcode::Normal, self.execute(opcode, mem)),
+        self.last_regs = self.registers_str(&mem);
+        self.last_instruction = match opcode {
+            0xcb => self.execute_cb(opcode, mem),
+            _ => self.execute(opcode, mem),
         };
-
-        self.handle_execute(opcode_type, &r, &regs);
+        match self.last_instruction {
+            Instruction::Ok(opcode, length, clocks, description) => {
+                self.set_clocks(0, clocks);
+                self.PC = self.PC.wrapping_add(length);
+            }
+            Instruction::Invalid(opcode) => println!("invalid upcode {opcode}"),
+        }
         self.check_interrupt_status(mem, opcode);
     }
 
-    fn handle_execute(&mut self, opcode_type: Opcode, result: &Instruction, regs: &str) {
-        match result {
-            Instruction::Ok(opcode, length, clocks, description) => {
-                self.set_clocks(0, *clocks);
-                self.PC = self.PC.wrapping_add(*length);
-                //println!("{0:010}|op:{1} {2}", description, Self::clean_hex_8(*opcode), regs);
-            }
-            Instruction::Invalid(opcode) => println!("invalid upcode {opcode} for {opcode_type}"),
-        }
-    }
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {
         //Go through the five different interrupts and see if any is triggered
 
@@ -263,22 +283,22 @@ impl Cpu {
     fn clean_hex_16(v: u16) -> String {
         format!("{0:#06x}", v).replace("0x", "")
     }
-    fn clean_b_8(v:u8) -> String{
-        format!("{0:#06b}", v>>4).replace("0b", "")
+    fn clean_b_8(v: u8) -> String {
+        format!("{0:#06b}", v >> 4).replace("0b", "")
     }
     fn registers_str(&self, mem: &memory::Memory) -> String {
         let mut s = String::from("");
-        s = format!("PC:{0}",Self::clean_hex_16(self.PC));
-        s = format!("{s} SP:{0}",Self::clean_hex_16(self.SP));
-        s = format!("{s} A:{0}",Self::clean_hex_8(self.get_a()));
-        s = format!("{s} F:{0}",Self::clean_b_8((self.AF & 0xFF) as u8));
-        s = format!("{s} B:{0}",Self::clean_hex_8(self.get_b()));
-        s = format!("{s} C:{0}",Self::clean_hex_8(self.get_c()));
-        s = format!("{s} D:{0}",Self::clean_hex_8(self.get_d()));
-        s = format!("{s} E:{0}",Self::clean_hex_8(self.get_e()));
-        s = format!("{s} H:{0}",Self::clean_hex_8(self.get_h()));
-        s = format!("{s} L:{0}",Self::clean_hex_8(self.get_l()));
-        s = format!("{s} nn:{0}",Self::clean_hex_16(self.get_nn(mem)));
+        s = format!("PC:{0}", Self::clean_hex_16(self.PC));
+        s = format!("{s} SP:{0}", Self::clean_hex_16(self.SP));
+        s = format!("{s} A:{0}", Self::clean_hex_8(self.get_a()));
+        s = format!("{s} F:{0}", Self::clean_b_8((self.AF & 0xFF) as u8));
+        s = format!("{s} B:{0}", Self::clean_hex_8(self.get_b()));
+        s = format!("{s} C:{0}", Self::clean_hex_8(self.get_c()));
+        s = format!("{s} D:{0}", Self::clean_hex_8(self.get_d()));
+        s = format!("{s} E:{0}", Self::clean_hex_8(self.get_e()));
+        s = format!("{s} H:{0}", Self::clean_hex_8(self.get_h()));
+        s = format!("{s} L:{0}", Self::clean_hex_8(self.get_l()));
+        s = format!("{s} nn:{0}", Self::clean_hex_16(self.get_nn(mem)));
         s
     }
 }

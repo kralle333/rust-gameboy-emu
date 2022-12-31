@@ -2,7 +2,7 @@ use std::ops::{Shl, Shr};
 
 use crate::memory::{self, MemoryType};
 
-use super::{Cpu, Flag, Register, Instruction};
+use super::{Cpu, Flag, Instruction, Register};
 
 impl Cpu {
     pub fn execute(&mut self, opcode: u8, mem: &mut memory::Memory) -> Instruction {
@@ -17,7 +17,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD (BC),A")
             }
             0x03 => {
-                let _ = self.BC.wrapping_add(1);
+                self.BC = self.BC.wrapping_add(1);
                 Instruction::Ok(opcode, 1, 8, "INC BC")
             }
             0x04 => {
@@ -40,8 +40,7 @@ impl Cpu {
             }
             0x08 => {
                 let addr = self.get_nn(mem);
-                let val = mem.read_word(addr);
-                mem.write_word(val, self.SP);
+                mem.write_word(addr, self.SP);
                 Instruction::Ok(opcode, 2, 12, "LD (a16),SP")
             }
             0x09 => {
@@ -53,7 +52,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD A,(BC)")
             }
             0x0b => {
-                let _ = self.BC.wrapping_sub(1);
+                self.BC = self.BC.wrapping_sub(1);
                 Instruction::Ok(opcode, 1, 8, "DEC BC")
             }
             0x0c => {
@@ -120,7 +119,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 2, "LD A, (DE)")
             }
             0x1b => {
-                self.DE = self.sub_16(self.DE, 1);
+                self.DE = self.DE.wrapping_sub(1);
                 Instruction::Ok(opcode, 1, 2, "DEC DE")
             }
             0x1c => {
@@ -175,10 +174,25 @@ impl Cpu {
                 Instruction::Ok(opcode, 2, 8, "LD H,d8")
             }
             0x27 => {
-                let a = self.get_a();
-                if a > 9 {}
-                //TODO: Just take solution somewhere
+                // solution from: https://ehaskins.com/2018-01-30%20Z80%20DAA/
+                let mut value = self.get_a();
+                let mut correction: u8 = 0;
+                if self.get_flag(Flag::H) || (!self.get_flag(Flag::N) && (value & 0xf) > 9) {
+                    correction |= 0x6;
+                }
 
+                if self.get_flag(Flag::C) || (!self.get_flag(Flag::N) && value > 0x99) {
+                    correction |= 0x60;
+                    self.set_flag(Flag::C, true);
+                }
+
+                if self.get_flag(Flag::N) {
+                    value -= correction;
+                } else {
+                    value += correction;
+                }
+                self.set_flag(Flag::Z, value == 0);
+                self.set_a(value);
                 Instruction::Ok(opcode, 1, 1, "DAA")
             }
             0x28 => {
@@ -241,15 +255,15 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "INC SP")
             }
             0x34 => {
-                let val = self.HL;
-                let result = self.add_16(mem.read_word(val), 1);
-                mem.write_word(val, result);
+                let val = mem.read_byte(self.HL);
+                let result = self.inc_8(val);
+                mem.write_byte(self.HL, result);
                 Instruction::Ok(opcode, 2, 12, "INC (HL)")
             }
             0x35 => {
-                let val = self.HL;
-                let result = self.sub_16(mem.read_word(val), 1);
-                mem.write_word(val, result);
+                let val = mem.read_byte(self.HL);
+                let result = self.dec_8(val);
+                mem.write_byte(self.HL, result);
                 Instruction::Ok(opcode, 2, 12, "DEC (HL)")
             }
             0x36 => {
@@ -836,7 +850,7 @@ impl Cpu {
             }
             0xc4 => {
                 if !self.get_flag(Flag::Z) {
-                    self.call(mem);
+                    self.call_a16(mem);
                     return Instruction::Ok(opcode, 3, 24, "CALL NZ, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
@@ -874,13 +888,13 @@ impl Cpu {
             0xcb => Instruction::Invalid(opcode), // CB
             0xcc => {
                 if self.get_flag(Flag::Z) {
-                    self.call(mem);
+                    self.call_a16(mem);
                     return Instruction::Ok(opcode, 3, 24, "CALL Z, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
             }
             0xcd => {
-                self.call(mem);
+                self.call_a16(mem);
                 Instruction::Ok(opcode, 3, 24, "CALL a16")
             }
             0xce => {
@@ -912,7 +926,7 @@ impl Cpu {
             0xd3 => Instruction::Invalid(opcode),
             0xd4 => {
                 if !self.get_flag(Flag::Z) {
-                    self.call(mem);
+                    self.call_a16(mem);
                     return Instruction::Ok(opcode, 3, 24, "CALL NZ, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
@@ -951,13 +965,13 @@ impl Cpu {
             0xdb => Instruction::Invalid(opcode),
             0xdc => {
                 if self.get_flag(Flag::C) {
-                    self.call(mem);
+                    self.call_a16(mem);
                     return Instruction::Ok(opcode, 3, 24, "CALL C, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL C, a16")
             }
             0xdd => {
-                self.call(mem);
+                self.call_a16(mem);
                 return Instruction::Ok(opcode, 3, 24, "CALL a16");
             }
             0xde => {

@@ -52,16 +52,16 @@ impl Cpu {
 
     pub fn add_16(&mut self, reg: u16, val: u16) -> u16 {
         let (result, overflow) = Self::overflow_add_16(reg, val);
+        self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, Self::is_half_carry_on_add_16(reg, val));
         self.set_flag(Flag::C, overflow);
-        self.set_flag(Flag::N, false);
         result
     }
     pub fn sub_16(&mut self, reg: u16, val: u16) -> u16 {
         let (result, overflow) = Self::borrow_sub_16(reg, val);
+        self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, Self::is_half_carry_on_sub_16(reg, val));
         self.set_flag(Flag::C, overflow);
-        self.set_flag(Flag::N, false);
         result
     }
 
@@ -109,16 +109,21 @@ impl Cpu {
             None => (a.wrapping_sub(b), true),
         }
     }
-
-    pub fn dec_register(&mut self, register: Register) {
-        let mut val = self.get_reg(register);
+    pub fn dec_8(&mut self, val: u8) -> u8 {
+        let mut val = val;
         let half_borrow = Self::is_half_borrowing_sub(val, 1);
         val = val.wrapping_sub(1);
-        self.set_reg(register, val);
 
-        self.set_flag(Flag::H, half_borrow);
-        self.set_flag(Flag::N, true);
         self.set_flag(Flag::Z, val == 0);
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::H, half_borrow);
+        val
+    }
+
+    pub fn dec_register(&mut self, register: Register) {
+        let val = self.get_reg(register);
+        let result = self.dec_8(val);
+        self.set_reg(register, result);
     }
 
     pub fn pop_sp(&mut self, mem: &Memory) -> u16 {
@@ -131,7 +136,7 @@ impl Cpu {
         mem.write_word(self.SP, rcv);
     }
 
-    pub fn call(&mut self, mem: &mut Memory) {
+    pub fn call_a16(&mut self, mem: &mut Memory) {
         self.push_sp(mem, self.PC);
         self.PC = self.get_nn(mem);
     }
@@ -142,16 +147,21 @@ impl Cpu {
         self.IME = false;
         self.HALT = false;
     }
-
-    pub fn inc_register(&mut self, register: Register) {
-        let mut val = self.get_reg(register);
+    pub fn inc_8(&mut self, val: u8) -> u8 {
+        let mut val = val;
         let borrow = Self::is_half_carry_add(val, 1);
         val = val.wrapping_add(1);
-        self.set_reg(register, val);
 
-        self.set_flag(Flag::H, borrow);
+        self.set_flag(Flag::Z, val == 0);
         self.set_flag(Flag::N, false);
-        self.set_flag(Flag::Z, val == 0)
+        self.set_flag(Flag::H, borrow);
+        val
+    }
+
+    pub fn inc_register(&mut self, register: Register) {
+        let val = self.get_reg(register);
+        let result = self.inc_8(val);
+        self.set_reg(register, result);
     }
 
     pub fn is_half_carry_add(a: u8, b: u8) -> bool {

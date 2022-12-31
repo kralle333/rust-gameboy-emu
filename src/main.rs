@@ -7,16 +7,29 @@ mod video;
 
 extern crate sdl2;
 
-use sdl2::{event::Event, keyboard};
+use sdl2::event::Event;
 
 use std::time::Duration;
 
 pub fn main() {
+    //Rewrite this into some kind of emulator config
+    let rom_path = std::env::args().nth(1).expect("no rom path given");
+
+    let print_cpu = match std::env::args().nth(2).unwrap_or_default().as_str() {
+        "true" => true,
+        _ => false,
+    };
+
+    let use_stepping = match std::env::args().nth(3).unwrap_or_default().as_str() {
+        "true" => true,
+        _ => false,
+    };
+
     let mut sdl = sdl_wrapper::SdlWrapper::new();
 
-    let mut emulator = emulator::Emulator::new();
-    let rom_path = std::env::args().nth(1).expect("no rom path given");
-    emulator.load_game(rom_path.to_string());
+    let config = emulator::Config::new(print_cpu, use_stepping, 0x190);
+    let mut emulator = emulator::Emulator::new(config);
+    emulator.load_rom(&rom_path.to_string());
 
     let mut input = input::Input::new();
     let mut canvas = sdl.get_window_canvas(
@@ -27,22 +40,13 @@ pub fn main() {
 
     emulator.reset();
 
-    let mut step = false;
     'running: loop {
         let events = sdl.get_events();
         for e in events {
             if let Event::Quit { .. } = e {
                 break 'running;
             }
-            if let Event::KeyDown { keycode, .. } = e {
-                if keycode.unwrap() == keyboard::Keycode::S {
-                    step = true;
-                }
-            }
             input.consume_keys(e)
-        }
-        if !step {
-            //continue;
         }
 
         emulator.tick(&input);
@@ -50,7 +54,6 @@ pub fn main() {
         if emulator.draw(&mut canvas) {
             canvas.present();
         }
-        step = false;
         //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 300));
     }
 }
