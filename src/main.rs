@@ -27,7 +27,7 @@ pub fn main() {
 
     let mut sdl = sdl_wrapper::SdlWrapper::new();
 
-    let config = emulator::Config::new(print_cpu, use_stepping, 0x190);
+    let config = emulator::Config::new(print_cpu, use_stepping, 0);
     let mut emulator = emulator::Emulator::new(config);
     emulator.load_rom(&rom_path.to_string());
 
@@ -37,8 +37,6 @@ pub fn main() {
         (video::SCREEN_WIDTH * video::PIXEL_SIZE) as u32,
         (video::SCREEN_HEIGHT * video::PIXEL_SIZE) as u32,
     );
-
-    emulator.reset();
 
     'running: loop {
         let events = sdl.get_events();

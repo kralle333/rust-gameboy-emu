@@ -8,12 +8,16 @@ use std::ops::{Shl, Shr};
 
 use crate::memory::{self, MemoryType};
 
+#[derive(Default)]
 pub enum Instruction {
+    #[default]
+    None,
     Ok(u8, u16, u32, &'static str),
     Invalid(u8),
 }
 
 #[allow(non_snake_case)]
+#[derive(Default)]
 pub struct Cpu {
     AF: u16,
     BC: u16,
@@ -53,38 +57,28 @@ enum Flag {
     C = 0x10,
 }
 
-enum Opcode {
-    Normal,
-    CB,
-}
-
-impl std::fmt::Display for Opcode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Opcode::Normal => write!(f, "Normal"),
-            Opcode::CB => write!(f, "CB"),
-        }
-    }
-}
-
 impl Cpu {
     pub fn new() -> Cpu {
-        Cpu {
-            AF: 0x01B0,
-            BC: 0x0013,
-            DE: 0x00D8,
-            HL: 0x014D,
-            SP: 0xFFFE,
-            PC: 0x0100,
-            clock_m: 0,
-            clock_t: 1,
-            IME: false,
-            HALT: false,
-            DI: false,
-            EI: false,
-            last_instruction: Instruction::Invalid(0x0),
-            last_regs: "".to_string(),
-        }
+        let mut c = Cpu::default();
+        c.reset();
+        c
+    }
+
+    pub fn reset(&mut self) {
+        self.AF = 0x01B0;
+        self.BC = 0x0013;
+        self.DE = 0x00D8;
+        self.HL = 0x014D;
+        self.SP = 0xFFFE;
+        self.PC = 0x0100;
+        self.clock_m = 0;
+        self.clock_t = 1;
+        self.IME = false;
+        self.HALT = false;
+        self.DI = false;
+        self.EI = false;
+        self.last_instruction = Instruction::None;
+        self.last_regs = "".to_string();
     }
 
     pub fn tick(&mut self, mem: &mut memory::Memory) {
@@ -93,6 +87,7 @@ impl Cpu {
 
     pub fn print(&self) {
         match self.last_instruction {
+            Instruction::None => {}
             Instruction::Ok(opcode, _, _, description) => {
                 println!(
                     "{0:010}|op:{1} {2}",
@@ -110,6 +105,8 @@ impl Cpu {
     pub fn get_clock_t(&self) -> u32 {
         self.clock_t
     }
+
+    #[allow(non_snake_case)]
     pub fn PC(&self) -> u16 {
         self.PC
     }
@@ -220,7 +217,6 @@ impl Cpu {
         self.clock_m = m;
         self.clock_t = t;
     }
-    fn opcode_to_type(opcode: u8) {}
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         let opcode = mem.read_byte(self.PC);
@@ -230,7 +226,8 @@ impl Cpu {
             _ => self.execute(opcode, mem),
         };
         match self.last_instruction {
-            Instruction::Ok(opcode, length, clocks, description) => {
+            Instruction::None => {}
+            Instruction::Ok(_, length, clocks, _) => {
                 self.set_clocks(0, clocks);
                 self.PC = self.PC.wrapping_add(length);
             }
@@ -287,7 +284,7 @@ impl Cpu {
         format!("{0:#06b}", v >> 4).replace("0b", "")
     }
     fn registers_str(&self, mem: &memory::Memory) -> String {
-        let mut s = String::from("");
+        let mut s;
         s = format!("PC:{0}", Self::clean_hex_16(self.PC));
         s = format!("{s} SP:{0}", Self::clean_hex_16(self.SP));
         s = format!("{s} A:{0}", Self::clean_hex_8(self.get_a()));

@@ -12,7 +12,7 @@ use sdl2::video::Window;
 
 use self::{gpu::Gpu, mbc::Mbc, mmu::Mmu, sound::Sound};
 
-const divider_add: i16 = 16384;
+const DIVIDER_ADD: i16 = 16384;
 
 pub trait MemoryType {
     fn read_byte(&self, addr: u16) -> u8;
@@ -115,7 +115,7 @@ impl MemoryType for Memory {
 
 impl Memory {
     pub fn new() -> Memory {
-        Memory {
+        let mut mem = Memory {
             mbc: Mbc::new(),
             mmu: Mmu::new(),
             gpu: Gpu::new(),
@@ -133,7 +133,9 @@ impl Memory {
             timer_counter: 0,
             timer_modulo: 0,
             timer_control: 0,
-        }
+        };
+        mem.reset();
+        mem
     }
 
     pub fn load(&mut self, data: Vec<u8>) {
@@ -160,7 +162,7 @@ impl Memory {
         self.write_byte(0xFF23, 0xBF); //NR30
         self.write_byte(0xFF24, 0x77); //NR50
         self.write_byte(0xFF25, 0xF3); //NR51
-        self.write_byte(0xFF26, 0xF1);
+        self.write_byte(0xFF26, 0xF1); //GB(0xF1) or SGB(0xF0)
         self.write_byte(0xFF40, 0x91); //LCDC
         self.write_byte(0xFF42, 0x00); //SCY
         self.write_byte(0xFF43, 0x00); //SCX
@@ -173,7 +175,7 @@ impl Memory {
         self.write_byte(0xFFFF, 0x00); //IE
         self.write_byte(0xFF0F, 0xE1); //IF
     }
-    pub fn draw(&mut self, canvas: &mut Canvas<Window>)->bool{
+    pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         self.gpu.draw(canvas)
     }
     pub fn tick(&mut self, clock_t: u32) {

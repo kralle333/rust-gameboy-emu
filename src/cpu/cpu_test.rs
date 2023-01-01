@@ -283,8 +283,6 @@ mod tests {
         assert_eq!(c.get_flag(Flag::N), false);
     }
 
-    fn test_opcode_reg_8(c: &mut Cpu, m: &mut Memory, opcode: u8, expected_val: u8, reg: Register) {
-    }
     #[test]
     fn test_load() {
         let mut t = Tester::new();

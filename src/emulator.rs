@@ -1,7 +1,5 @@
 use std::fs;
 
-use sdl2::event::Event;
-use sdl2::keyboard;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 
@@ -80,13 +78,14 @@ impl Emulator {
     }
 
     pub fn reset(&mut self) {
+        self.cpu.reset();
         self.memory.reset();
     }
 
-    pub fn tick(&mut self, keys: &Input) {
+    fn check_debug_input(&mut self, keys: &Input) -> bool {
         if keys.is_new_down(&Button::Reset) {
             self.reload_rom();
-            return;
+            return false;
         }
         if keys.is_new_down(&Button::Step) {
             self.step_one = true;
@@ -102,18 +101,26 @@ impl Emulator {
             DebugMode::None => {}
             DebugMode::Stepping => {
                 if !self.step_one {
-                    return;
+                    return false;
                 }
             }
             DebugMode::Breakpoint(addr) => {
                 if self.cpu.PC() == addr {
                     self.debug_mode = DebugMode::Stepping;
                     self.config.print_cpu = true;
-                    println!("Reached breakpoint {}, entering stepping mode", addr);
-                    return;
+                    println!("Reached breakpoint {:#0x}, entering stepping mode", addr);
+                    return false;
                 }
             }
         }
+        true
+    }
+
+    pub fn tick(&mut self, keys: &Input) {
+        if !self.check_debug_input(keys) {
+            return;
+        }
+
         self.cpu.tick(&mut self.memory);
         self.memory.tick(self.cpu.get_clock_t());
         self.step_one = false;

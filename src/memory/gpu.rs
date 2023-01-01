@@ -179,7 +179,7 @@ impl Gpu {
             bg_palette: 0,
             obj_palette0: 0,
             obj_palette1: 0,
-            dma_write_addr:0,
+            dma_write_addr: 0,
             pixels: [0; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
             background_palette: [0; 4],
             object_palette0: [0; 4],
@@ -202,9 +202,9 @@ impl Gpu {
         if addr & 1 == 1 {
             write_addr -= 1;
         } //Because each line is represented as 2 lines, start with the first one
-        let tile = (write_addr >> 4) & 511; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
+        let tile = (addr >> 4) & 511; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
 
-        let y = (write_addr >> 1) & 7; //
+        let y = (addr >> 1) & 7; //
         let mut sx;
         let mut bit_value1 = 0;
         let mut bit_value2 = 0;
@@ -216,6 +216,9 @@ impl Gpu {
             if (self.vram[(write_addr + 1) as usize] & sx) > 0 {
                 bit_value2 = 2;
             }
+            let result = bit_value1 + bit_value2;
+            if result > 0 {}
+
             self.bg_tiles[tile as usize][y as usize][x as usize] = bit_value1 + bit_value2;
         }
     }
@@ -236,7 +239,7 @@ impl Gpu {
     }
     fn update_palette(&mut self, pal: PaletteType, val: u8) {
         let mut palette = [0; 4];
-        //println!("updating palette: {0:?} to {1:#04b}", pal, val);
+        println!("updating palette: {0:?} to {1:#04b}", pal, val);
         for i in 0..4 {
             let new_color = (val >> (i * 2)) & 0b11;
             palette[i] = new_color;
@@ -253,8 +256,8 @@ impl Gpu {
             return false;
         }
         self.can_draw = false;
-        for x in 0..video::SCREEN_WIDTH - 1 {
-            for y in 0..video::SCREEN_HEIGHT - 1 {
+        for y in 0..video::SCREEN_HEIGHT {
+            for x in 0..video::SCREEN_WIDTH {
                 let color = match self.pixels[x + video::SCREEN_WIDTH * y] {
                     0 => WHITE,
                     1 => LIGHT_GRAY,
@@ -356,7 +359,7 @@ impl Gpu {
         }
 
         // Which line of tiles to use in the map
-        map_offs += ((self.vert_line + self.scroll_y) & 255) as u16 >> 3;
+        map_offs += (((self.vert_line + self.scroll_y) >> 3) as u16) << 5;
 
         // Which tile to start with in the map line
         let mut lineoffs: u16 = (self.scroll_x >> 3) as u16;
@@ -375,15 +378,19 @@ impl Gpu {
         // If the tile data set in use is #1, the
         // indices are signed; calculate a real tile offset
         let lcdl_4_set = (self.lcdc & 0x10) == 0x10;
-        if lcdl_4_set && tile < 128 {
-            tile = tile.wrapping_add(0xff);
+        if !lcdl_4_set && tile < 128 {
+            tile += 256;
         }
-        (0..SCREEN_WIDTH).for_each(|_i: usize| {
+        for _ in 0..=SCREEN_WIDTH {
             // Re-map the tile pixel through the palette
             let pal_color = self.background_palette[self.bg_tiles[tile as usize][y][x] as usize];
 
             // Plot the pixel to canvas
             self.pixels[canvasoffs as usize] = pal_color;
+            if tile > 0 {
+                //println!("tile {tile}");
+                //panic!("!");
+            }
 
             canvasoffs += 1;
 
@@ -393,10 +400,10 @@ impl Gpu {
                 x = 0;
                 lineoffs = (lineoffs + 1) & 31;
                 tile = self.vram[(map_offs + lineoffs) as usize] as u16;
-                if lcdl_4_set && tile < 128 {
+                if !lcdl_4_set && tile < 128 {
                     tile += 256;
                 }
             }
-        });
+        }
     }
 }
