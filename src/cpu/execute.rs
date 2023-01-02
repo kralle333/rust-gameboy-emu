@@ -107,7 +107,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 4, "RLA")
             }
             0x18 => {
-                self.PC = self.PC.wrapping_add(self.get_n(mem) as u16);
+                self.jump_relative(self.get_n(mem) as i8);
                 Instruction::Ok(opcode, 0, 3, "JR r8")
             }
             0x19 => {
@@ -142,11 +142,10 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 1, "RRA")
             }
             0x20 => {
-                if !self.get_flag(Flag::C) {
-                    self.PC = self.PC.wrapping_add(self.get_n(mem) as u16);
-                    return Instruction::Ok(opcode, 0, 3, "JR NC,r8");
+                if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::Z, false) {
+                    return Instruction::Ok(opcode, 0, 3, "JR NZ,r8");
                 }
-                Instruction::Ok(opcode, 2, 2, "JR NC,r8")
+                Instruction::Ok(opcode, 2, 2, "JR NZ,r8")
             }
             0x21 => {
                 self.HL = self.get_nn(mem);
@@ -196,8 +195,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 1, "DAA")
             }
             0x28 => {
-                if self.get_flag(Flag::Z) {
-                    self.PC = self.PC.wrapping_add(self.get_n(mem) as u16);
+                if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::Z, true) {
                     return Instruction::Ok(opcode, 0, 3, "JR Z,r8");
                 }
                 Instruction::Ok(opcode, 2, 2, "JR Z,r8")
@@ -235,8 +233,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 4, "CPL")
             }
             0x30 => {
-                if !self.get_flag(Flag::C) {
-                    self.PC = self.PC.wrapping_add(self.get_n(mem) as u16);
+                if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::C, false) {
                     return Instruction::Ok(opcode, 0, 12, "JR NC,r8");
                 }
                 Instruction::Ok(opcode, 2, 8, "JR NC,r8")
@@ -276,8 +273,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 4, "SCF")
             }
             0x38 => {
-                if self.get_flag(Flag::C) {
-                    self.PC = self.PC.wrapping_add(self.get_n(mem) as u16);
+                if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::C, true) {
                     return Instruction::Ok(opcode, 0, 12, "JR C,r8");
                 }
                 Instruction::Ok(opcode, 2, 8, "JR C,r8")

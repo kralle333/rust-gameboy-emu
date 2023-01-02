@@ -97,6 +97,18 @@ impl Cpu {
         self.sub_a(b);
         self.set_a(a);
     }
+    pub fn jump_relative(&mut self, amount: i8) {
+        self.PC += 2;
+        let result = (self.PC).wrapping_add(amount as u16);
+        self.PC = result as u16;
+    }
+    pub fn jump_relative_with_flag(&mut self, amount: i8, flag: Flag, flag_set: bool) -> bool {
+        if flag_set != self.get_flag(flag) {
+            return false;
+        }
+        self.jump_relative(amount);
+        return true;
+    }
     pub fn borrow_sub(b: u8, a: u8) -> (u8, bool) {
         match b.checked_sub(a) {
             Some(x) => (x, false),
@@ -128,11 +140,11 @@ impl Cpu {
 
     pub fn pop_sp(&mut self, mem: &Memory) -> u16 {
         let out = mem.read_word(self.SP);
-        self.SP += 2;
+        self.SP = self.SP.wrapping_add(2);
         out
     }
     pub fn push_sp(&mut self, mem: &mut Memory, rcv: u16) {
-        self.SP -= 2;
+        self.SP = self.SP.wrapping_sub(2);
         mem.write_word(self.SP, rcv);
     }
 

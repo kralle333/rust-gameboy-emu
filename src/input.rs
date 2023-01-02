@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use sdl2::{event::Event, keyboard::Keycode};
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Button {
     A,
     B,
@@ -75,7 +75,9 @@ impl Input {
         *self.key_states.get(b).unwrap()
     }
     pub fn is_new_down(&self, b: &Button) -> bool {
-        *self.key_states.get(b).unwrap() && !*self.prev_key_states.get(b).unwrap()
+        let key_down = *self.key_states.get(b).unwrap();
+        let prev_key_down = *self.prev_key_states.get(b).unwrap();
+        key_down && !prev_key_down
     }
     fn set_button(&mut self, key: Option<Keycode>, is_down: bool) {
         let k = key.unwrap();
@@ -86,14 +88,13 @@ impl Input {
             None => {}
         }
     }
-    fn set_prev_keys(&mut self) {
+    pub fn set_prev_keys(&mut self) {
         for state in &self.key_states {
             self.prev_key_states.insert(*state.0, *state.1);
         }
     }
 
     pub fn consume_keys(&mut self, event: Event) {
-        self.set_prev_keys();
         match event {
             Event::KeyDown { keycode, .. } => self.set_button(keycode, true),
             Event::KeyUp { keycode, .. } => self.set_button(keycode, false),

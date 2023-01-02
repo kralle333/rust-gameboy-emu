@@ -1,7 +1,6 @@
 use super::MemoryType;
 
 const KB: usize = 1024;
-const MB: usize = KB * 1024;
 
 #[derive(PartialEq)]
 enum MbcMode {
@@ -11,28 +10,18 @@ enum MbcMode {
 }
 #[derive(Debug)]
 enum CartridgeType {
-    RomOnly = 0,
-    RomMbc1 = 1,
-    RomMbc1Ram = 2,
-    RomMbc1RamBatt = 3,
-    RomMbc2 = 5,
-    RomMbc2Batt = 6,
-    RomRam = 8,
-    RomRamBatt = 9,
+    RomOnly,
+    Mbc1,
+    Mbc2,
     Invalid = 1000,
 }
 
 impl CartridgeType {
     fn from_u32(val: u32) -> CartridgeType {
         match val {
-            0 => CartridgeType::RomOnly,
-            1 => CartridgeType::RomMbc1,
-            2 => CartridgeType::RomMbc1Ram,
-            3 => CartridgeType::RomMbc1RamBatt,
-            5 => CartridgeType::RomMbc2,
-            6 => CartridgeType::RomMbc2Batt,
-            8 => CartridgeType::RomRam,
-            9 => CartridgeType::RomRamBatt,
+            0 | 8 | 9 => CartridgeType::RomOnly,
+            1 | 2 | 3 => CartridgeType::Mbc1,
+            5 | 6 => CartridgeType::Mbc2,
             _ => CartridgeType::Invalid,
         }
     }
@@ -69,51 +58,14 @@ impl MemoryType for Rom {
     }
 
     fn write_byte(&mut self, addr: u16, val: u8) {
-        let addr = addr as usize;
         match addr {
             0x0000..=0x7fff => {
+                self.write_mbc1(addr, val);
                 // Select some stuff
-                match self.cartidge_type {
-                    CartridgeType::RomMbc1
-                    | CartridgeType::RomMbc1Ram
-                    | CartridgeType::RomMbc1RamBatt => match addr {
-                        0x0000..=0x1fff => {
-                            self.ram_enabled = (addr & 0xff) == 0x0a;
-                        }
-                        0x2000..=0x3fff => {
-                            let mut rom_bank = addr & 0x3;
-                            if rom_bank == 0 {
-                                rom_bank = 1;
-                            }
-                            self.rom_offset = match self.mbc_mode {
-                                MbcMode::Mbc1_16mbRom8kbRam => (rom_bank) * 0x4000,
-                                MbcMode::Mbc1_4mbRom32kbRam => (rom_bank) * 4 * 0x1000,
-                                _ => unimplemented!(),
-                            };
-                            println!("switched to rom bank {rom_bank}");
-                        }
-                        0x4000..=0x5fff => {
-                            if self.mbc_mode == MbcMode::Mbc1_4mbRom32kbRam {
-                                let ram_bank = addr & 0x3;
-                                self.ram_offset = ram_bank * 0x2000;
-                                println!("switced to ram bank {ram_bank}");
-                            }
-                        }
-                        0x6000..=0x7fff => {
-                            self.mbc_mode = if (addr as u8 & 1) == 1 {
-                                MbcMode::Mbc1_16mbRom8kbRam
-                            } else {
-                                MbcMode::Mbc1_4mbRom32kbRam
-                            };
-                        }
-                        _ => panic!(),
-                    },
-                    _ => unimplemented!(),
-                }
             }
-            0xa000..=0xbfff => self.external_ram[addr & 0x1fff] = val,
-            0xc000..=0xdfff => self.internal_ram[addr & 0x1fff] = val,
-            0xe000..=0xfdff => self.internal_ram[(addr - 0x2000) & 0x1fff] = val, // echo
+            0xa000..=0xbfff => self.external_ram[addr as usize & 0x1fff] = val,
+            0xc000..=0xdfff => self.internal_ram[addr as usize & 0x1fff] = val,
+            0xe000..=0xfdff => self.internal_ram[(addr as usize - 0x2000) & 0x1fff] = val, // echo
             _ => panic!("fail"),
         }
     }
@@ -134,19 +86,48 @@ impl Rom {
             ram_enabled: false,
         }
     }
+    fn write_mbc1(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x0000..=0x1fff => {
+                self.ram_enabled = (val & 0xff) == 0x0a;
+            }
+            0x2000..=0x3fff => {
+                let mut rom_bank = val & 0x3;
+                if rom_bank == 0 {
+                    rom_bank = 1;
+                }
+                self.rom_offset = match self.mbc_mode {
+                    MbcMode::Mbc1_16mbRom8kbRam => (rom_bank as usize) * 0x4000,
+                    MbcMode::Mbc1_4mbRom32kbRam => (rom_bank as usize) * 4 * 0x1000,
+                    _ => unimplemented!(),
+                };
+                println!("switched to rom bank {rom_bank}");
+            }
+            0x4000..=0x5fff => {
+                if self.mbc_mode == MbcMode::Mbc1_4mbRom32kbRam {
+                    let ram_bank = val & 0x3;
+                    self.ram_offset = ram_bank as usize * 0x2000;
+                    println!("switced to ram bank {ram_bank}");
+                }
+            }
+            0x6000..=0x7fff => {
+                self.mbc_mode = if (val as u8 & 1) == 1 {
+                    MbcMode::Mbc1_16mbRom8kbRam
+                } else {
+                    MbcMode::Mbc1_4mbRom32kbRam
+                };
+            }
+            _ => panic!(),
+        }
+    }
 
     pub fn load(&mut self, data: &[u8]) {
         self.cartidge_type = CartridgeType::from_u32(data[0x147] as u32);
 
         match self.cartidge_type {
             CartridgeType::RomOnly => {}
-            CartridgeType::RomMbc1 | CartridgeType::RomMbc1Ram | CartridgeType::RomMbc1RamBatt => {
-                self.mbc_mode = MbcMode::Mbc1_16mbRom8kbRam
-            }
-            CartridgeType::RomMbc2 => todo!(),
-            CartridgeType::RomMbc2Batt => todo!(),
-            CartridgeType::RomRam => todo!(),
-            CartridgeType::RomRamBatt => todo!(),
+            CartridgeType::Mbc1 => self.mbc_mode = MbcMode::Mbc1_16mbRom8kbRam,
+            CartridgeType::Mbc2 => todo!(),
             CartridgeType::Invalid => todo!(),
         }
 

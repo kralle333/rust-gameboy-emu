@@ -50,7 +50,8 @@ pub enum Register {
     F,
 }
 
-enum Flag {
+#[derive(PartialEq)]
+pub enum Flag {
     Z = 0x80,
     N = 0x40,
     H = 0x20,
@@ -288,7 +289,7 @@ impl Cpu {
         s = format!("PC:{0}", Self::clean_hex_16(self.PC));
         s = format!("{s} SP:{0}", Self::clean_hex_16(self.SP));
         s = format!("{s} A:{0}", Self::clean_hex_8(self.get_a()));
-        s = format!("{s} F:{0}", Self::clean_b_8((self.AF & 0xFF) as u8));
+        s = format!("{s} F:{0}", Self::clean_b_8(self.get_f()));
         s = format!("{s} B:{0}", Self::clean_hex_8(self.get_b()));
         s = format!("{s} C:{0}", Self::clean_hex_8(self.get_c()));
         s = format!("{s} D:{0}", Self::clean_hex_8(self.get_d()));
