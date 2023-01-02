@@ -62,9 +62,9 @@ impl Emulator {
     }
     pub fn load_rom(&mut self, file_path: &String) {
         let result = fs::read(file_path).expect("file not found");
+        println!("Loading rom {file_path}");
         self.memory.load(result);
         self.loaded_rom = file_path.to_string();
-        println!("Loaded rom {file_path}");
     }
 
     fn reload_rom(&mut self) {
@@ -85,6 +85,10 @@ impl Emulator {
     fn check_debug_input(&mut self, keys: &Input) -> bool {
         if keys.is_new_down(&Button::Reset) {
             self.reload_rom();
+            return false;
+        }
+        if keys.is_new_down(&Button::DumpBgTiles) {
+            self.memory.dump_bg_tiles();
             return false;
         }
         if keys.is_new_down(&Button::Step) {

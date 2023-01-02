@@ -14,6 +14,7 @@ pub enum Button {
     Up,
 
     Reset,
+    DumpBgTiles,
     Step,
     ToggleStepping,
 }
@@ -35,6 +36,7 @@ fn get_default_config() -> HashMap<Keycode, Button> {
     keys.insert(Keycode::Return, Button::Start);
 
     keys.insert(Keycode::R, Button::Reset);
+    keys.insert(Keycode::D, Button::DumpBgTiles);
     keys.insert(Keycode::F9, Button::Step);
     keys.insert(Keycode::F2, Button::ToggleStepping);
 
@@ -56,6 +58,7 @@ impl Input {
 
         //System
         keys.insert(Button::Reset, false);
+        keys.insert(Button::DumpBgTiles, false);
         keys.insert(Button::Step, false);
         keys.insert(Button::ToggleStepping, false);
 

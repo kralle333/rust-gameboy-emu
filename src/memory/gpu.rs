@@ -1,12 +1,46 @@
 use sdl2::{pixels::Color, rect::Rect, render::Canvas, video::Window};
 
 use super::MemoryType;
-use crate::video::{self, SCREEN_WIDTH};
+use crate::video::{self, SCREEN_HEIGHT, SCREEN_WIDTH};
 
-const WHITE: Color = Color::RGBA(0x9C, 0xBD, 0x0F, 0xFF);
-const LIGHT_GRAY: Color = Color::RGBA(0x8C, 0xAD, 0x0F, 0xFF);
-const DARK_GRAY: Color = Color::RGBA(0x30, 0x62, 0x30, 0xFF);
-const BLACK: Color = Color::RGBA(0x0F, 0x38, 0x0F, 0xFF);
+enum ColorScheme {
+    Green,
+    BlackWhite,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GBColor {
+    White = 0,
+    LightGray = 1,
+    DarkGray = 2,
+    Black = 3,
+}
+
+fn byte_to_color(val: u8) -> GBColor {
+    match val {
+        0 => GBColor::White,
+        1 => GBColor::LightGray,
+        2 => GBColor::DarkGray,
+        3 => GBColor::Black,
+        _ => panic!("what"),
+    }
+}
+
+fn get_color(color: &GBColor, scheme: &ColorScheme) -> Color {
+    match scheme {
+        ColorScheme::Green => match color {
+            GBColor::White => Color::RGBA(0x9C, 0xBD, 0x0F, 0xFF),
+            GBColor::LightGray => Color::RGBA(0x8C, 0xAD, 0x0F, 0xFF),
+            GBColor::DarkGray => Color::RGBA(0x30, 0x62, 0x30, 0xFF),
+            GBColor::Black => Color::RGBA(0x0F, 0x38, 0x0F, 0xFF),
+        },
+        ColorScheme::BlackWhite => match color {
+            GBColor::White => Color::RGBA(0xFF, 0xFF, 0xFF, 0xFF),
+            GBColor::LightGray => Color::RGBA(0x8C, 0x8C, 0x8C, 0xFF),
+            GBColor::DarkGray => Color::RGBA(0x30, 0x30, 0x30, 0xFF),
+            GBColor::Black => Color::RGBA(0, 0, 0, 0xFF),
+        },
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub enum TickMode {
@@ -28,11 +62,10 @@ impl TickMode {
     }
 }
 
-type ColorByte = u8;
-type Tile16 = [[ColorByte; 8]; 8];
+type Tile16 = [[GBColor; 8]; 8];
 
 fn make_tile16() -> Tile16 {
-    [[0; 8]; 8]
+    [[GBColor::White; 8]; 8]
 }
 
 #[derive(Clone, Copy)]
@@ -74,22 +107,22 @@ pub struct Gpu {
     clock: u32,
     can_draw: bool,
     //Video registers
-    lcdc: u8,                           //FF40
-    lcdc_stat: u8,                      //FF41
-    scroll_x: u8,                       //FF42
-    scroll_y: u8,                       //FF43
-    vert_line: u8,                      //FF44
-    vert_line_cp: u8,                   //FF45
-    dma_write_addr: u8,                 //FF46
-    window_y: u8,                       //FF4A
-    window_x: u8,                       //FF4B
-    bg_palette: u8,                     //FF47,
-    obj_palette0: u8,                   //FF48
-    obj_palette1: u8,                   //FF49
-    background_palette: [ColorByte; 4], //FF47
-    object_palette0: [ColorByte; 4],    //FF48
-    object_palette1: [ColorByte; 4],    //FF49
-    pixels: [ColorByte; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
+    lcdc: u8,                         //FF40
+    lcdc_stat: u8,                    //FF41
+    scroll_x: u8,                     //FF42
+    scroll_y: u8,                     //FF43
+    vert_line: u8,                    //FF44
+    vert_line_cp: u8,                 //FF45
+    dma_write_addr: u8,               //FF46
+    window_y: u8,                     //FF4A
+    window_x: u8,                     //FF4B
+    bg_palette: u8,                   //FF47,
+    obj_palette0: u8,                 //FF48
+    obj_palette1: u8,                 //FF49
+    background_palette: [GBColor; 4], //FF47
+    object_palette0: [GBColor; 4],    //FF48
+    object_palette1: [GBColor; 4],    //FF49
+    pixels: [GBColor; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
 }
 
 impl MemoryType for Gpu {
@@ -97,18 +130,18 @@ impl MemoryType for Gpu {
         match addr {
             0x8000..=0x9fff => self.vram[(addr & 0x1fff) as usize],
             0xfe00..=0xfea0 => self.oam[(addr & 160) as usize],
-            0xff40..=0xff49 => match addr & 0x00FF {
+            0xff40..=0xff4b => match addr & 0x00FF {
                 0x40 => self.lcdc,
                 0x41 => self.lcdc_stat,
                 0x42 => self.scroll_y,
                 0x43 => self.scroll_x,
                 0x44 => self.vert_line,
                 0x45 => self.vert_line_cp,
-                0xFA => self.window_x,
-                0xFB => self.window_y,
                 0x47 => self.bg_palette,
                 0x48 => self.obj_palette0,
                 0x49 => self.obj_palette1,
+                0x4a => self.window_x,
+                0x4b => self.window_y,
                 _ => panic!("video flags"),
             },
             _ => panic!("video"),
@@ -131,7 +164,6 @@ impl MemoryType for Gpu {
             0xff40..=0xff4b => match addr & 0x00FF {
                 0x40 => self.lcdc = val,
                 0x41 => {
-                    self.lcdc_stat = val & 0xFC;
                     self.set_mode(TickMode::from_val(val & 0x3));
                 }
                 0x42 => self.scroll_y = val,
@@ -180,17 +212,22 @@ impl Gpu {
             obj_palette0: 0,
             obj_palette1: 0,
             dma_write_addr: 0,
-            pixels: [0; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
-            background_palette: [0; 4],
-            object_palette0: [0; 4],
-            object_palette1: [0; 4],
+            pixels: [GBColor::White; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
+            background_palette: [GBColor::White; 4],
+            object_palette0: [GBColor::White; 4],
+            object_palette1: [GBColor::White; 4],
             clock: 0,
         }
     }
 
+    pub(crate) fn get_pixel(&self, x: usize, y: usize) -> GBColor {
+        self.pixels[x + y * SCREEN_WIDTH]
+    }
     fn set_mode(&mut self, val: TickMode) {
         let old = self.mode();
         if old != val {
+            //println!("entering mode {:?}", val);
+            self.clock = 0;
             self.lcdc_stat = (self.lcdc_stat & !0x3) | (val as u8);
         }
     }
@@ -198,28 +235,28 @@ impl Gpu {
         TickMode::from_val(self.lcdc_stat & 0x3)
     }
     fn update_tile_data(&mut self, addr: u16) {
-        let mut write_addr = addr & 0x1fff;
+        let mut addr = addr & 0x1fff;
         if addr & 1 == 1 {
-            write_addr -= 1;
+            addr -= 1;
         } //Because each line is represented as 2 lines, start with the first one
-        let tile = (addr >> 4) & 511; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
+        let tile = addr >> 4; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
 
-        let y = (addr >> 1) & 7; //
+        let y = (addr >> 1) & 7;
         let mut sx;
         let mut bit_value1 = 0;
         let mut bit_value2 = 0;
         for x in 0..8 {
             sx = 1 << (7 - x);
-            if (self.vram[write_addr as usize] & sx) > 0 {
+            if (self.vram[addr as usize] & sx) > 0 {
                 bit_value1 = 1;
             }
-            if (self.vram[(write_addr + 1) as usize] & sx) > 0 {
+            if (self.vram[(addr + 1) as usize] & sx) > 0 {
                 bit_value2 = 2;
             }
             let result = bit_value1 + bit_value2;
-            if result > 0 {}
 
-            self.bg_tiles[tile as usize][y as usize][x as usize] = bit_value1 + bit_value2;
+            self.bg_tiles[tile as usize][y as usize][x as usize] =
+                byte_to_color(bit_value1 + bit_value2);
         }
     }
     fn update_object_data(&mut self, addr: u16, val: u8) {
@@ -238,11 +275,11 @@ impl Gpu {
         }
     }
     fn update_palette(&mut self, pal: PaletteType, val: u8) {
-        let mut palette = [0; 4];
-        println!("updating palette: {0:?} to {1:#04b}", pal, val);
+        let mut palette = [GBColor::White; 4];
+        //println!("updating palette: {0:?} to {1:#04b}", pal, val);
         for i in 0..4 {
             let new_color = (val >> (i * 2)) & 0b11;
-            palette[i] = new_color;
+            palette[i] = byte_to_color(new_color);
         }
         match pal {
             PaletteType::Background => self.background_palette = palette,
@@ -256,28 +293,20 @@ impl Gpu {
             return false;
         }
         self.can_draw = false;
-        for y in 0..video::SCREEN_HEIGHT {
-            for x in 0..video::SCREEN_WIDTH {
-                let color = match self.pixels[x + video::SCREEN_WIDTH * y] {
-                    0 => WHITE,
-                    1 => LIGHT_GRAY,
-                    2 => DARK_GRAY,
-                    3 => BLACK,
-                    _ => panic!("color unknown"),
-                };
-
-                canvas.set_draw_color(color);
-                let x = x * video::PIXEL_SIZE;
-                let y = y * video::PIXEL_SIZE;
-                match canvas.fill_rect(Rect::new(
-                    x as i32,
-                    y as i32,
-                    video::PIXEL_SIZE as u32,
-                    video::PIXEL_SIZE as u32,
-                )) {
-                    Ok(_) => {}
-                    Err(err) => panic!("{err}"),
-                }
+        let scheme = &ColorScheme::BlackWhite;
+        for i in 0..SCREEN_WIDTH * SCREEN_HEIGHT {
+            let color = get_color(&self.pixels[i], scheme);
+            canvas.set_draw_color(color);
+            let x = (i % SCREEN_WIDTH) * video::PIXEL_SIZE;
+            let y = (i / SCREEN_WIDTH) * video::PIXEL_SIZE;
+            match canvas.fill_rect(Rect::new(
+                x as i32,
+                y as i32,
+                video::PIXEL_SIZE as u32,
+                video::PIXEL_SIZE as u32,
+            )) {
+                Ok(_) => {}
+                Err(err) => panic!("{err}"),
             }
         }
         return true;
@@ -299,12 +328,10 @@ impl Gpu {
         match self.mode() {
             //OAM read
             TickMode::OAM if self.clock >= 80 => {
-                self.clock = 0;
                 self.set_mode(TickMode::OAMVRAM);
             }
             //OAM and VRAM reading
             TickMode::OAMVRAM if self.clock >= 172 => {
-                self.clock = 0;
                 self.set_mode(TickMode::HBLANK);
                 self.render_screen();
                 if self.lcdc_stat & (1 << 3) > 0 {
@@ -313,9 +340,8 @@ impl Gpu {
             }
             //HBlank
             TickMode::HBLANK if self.clock >= 204 => {
-                self.clock = 0;
                 self.vert_line += 1;
-                if self.vert_line == 143 {
+                if self.vert_line >= 144 {
                     self.set_mode(TickMode::VBLANK);
                     self.can_draw = true;
                     if self.lcdc_stat & (1 << 4) > 0 {
@@ -332,10 +358,10 @@ impl Gpu {
                 }
             }
             //VBlank
-            TickMode::VBLANK if self.clock >= 456 => {
+            TickMode::VBLANK if self.clock >= 114 => {
                 self.vert_line += 1;
                 self.clock = 0;
-                if self.vert_line > 153 {
+                if self.vert_line >= 153 {
                     self.set_mode(TickMode::OAM);
                     self.vert_line = 0;
                 }
@@ -362,7 +388,7 @@ impl Gpu {
         map_offs += (((self.vert_line + self.scroll_y) >> 3) as u16) << 5;
 
         // Which tile to start with in the map line
-        let mut lineoffs: u16 = (self.scroll_x >> 3) as u16;
+        let mut line_offset: u16 = (self.scroll_x as u16 >> 3);
 
         // Which line of pixels to use in the tiles
         let y = ((self.vert_line + self.scroll_y) & 7) as usize;
@@ -373,7 +399,7 @@ impl Gpu {
         let mut canvasoffs: u32 = (self.vert_line as usize * video::SCREEN_WIDTH) as u32;
 
         // Read tile index from the background map
-        let mut tile = self.vram[(map_offs + lineoffs) as usize] as u16;
+        let mut tile = self.vram[(map_offs + line_offset) as usize] as u16;
 
         // If the tile data set in use is #1, the
         // indices are signed; calculate a real tile offset
@@ -381,16 +407,12 @@ impl Gpu {
         if !lcdl_4_set && tile < 128 {
             tile += 256;
         }
-        for _ in 0..=SCREEN_WIDTH {
+        for _ in 0..SCREEN_WIDTH {
             // Re-map the tile pixel through the palette
             let pal_color = self.background_palette[self.bg_tiles[tile as usize][y][x] as usize];
 
-            // Plot the pixel to canvas
+            // Plot the pixel to canvas…
             self.pixels[canvasoffs as usize] = pal_color;
-            if tile > 0 {
-                //println!("tile {tile}");
-                //panic!("!");
-            }
 
             canvasoffs += 1;
 
@@ -398,12 +420,16 @@ impl Gpu {
             x += 1;
             if x == 8 {
                 x = 0;
-                lineoffs = (lineoffs + 1) & 31;
-                tile = self.vram[(map_offs + lineoffs) as usize] as u16;
+                line_offset = (line_offset + 1) & 31;
+                tile = self.vram[(map_offs + line_offset) as usize] as u16;
                 if !lcdl_4_set && tile < 128 {
                     tile += 256;
                 }
             }
         }
+    }
+
+    pub(crate) fn get_bg_tiles(&self) -> &[Tile16; 384] {
+        &self.bg_tiles
     }
 }

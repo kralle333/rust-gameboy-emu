@@ -27,7 +27,7 @@ pub fn main() {
 
     let mut sdl = sdl_wrapper::SdlWrapper::new();
 
-    let config = emulator::Config::new(print_cpu, use_stepping, 0);
+    let config = emulator::Config::new(print_cpu, use_stepping, 0x02c4);
     let mut emulator = emulator::Emulator::new(config);
     emulator.load_rom(&rom_path.to_string());
 
@@ -52,6 +52,6 @@ pub fn main() {
         if emulator.draw(&mut canvas) {
             canvas.present();
         }
-        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 300));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 300));
     }
 }

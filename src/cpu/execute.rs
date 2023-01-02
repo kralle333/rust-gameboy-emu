@@ -851,7 +851,7 @@ impl Cpu {
             0xc4 => {
                 if !self.get_flag(Flag::Z) {
                     self.call_a16(mem);
-                    return Instruction::Ok(opcode, 3, 24, "CALL NZ, a16");
+                    return Instruction::Ok(opcode, 0, 24, "CALL NZ, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
             }
@@ -889,13 +889,13 @@ impl Cpu {
             0xcc => {
                 if self.get_flag(Flag::Z) {
                     self.call_a16(mem);
-                    return Instruction::Ok(opcode, 3, 24, "CALL Z, a16");
+                    return Instruction::Ok(opcode, 0, 24, "CALL Z, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
             }
             0xcd => {
                 self.call_a16(mem);
-                Instruction::Ok(opcode, 3, 24, "CALL a16")
+                Instruction::Ok(opcode, 0, 24, "CALL a16")
             }
             0xce => {
                 self.adc_a(self.get_n(mem));
@@ -927,7 +927,7 @@ impl Cpu {
             0xd4 => {
                 if !self.get_flag(Flag::Z) {
                     self.call_a16(mem);
-                    return Instruction::Ok(opcode, 3, 24, "CALL NZ, a16");
+                    return Instruction::Ok(opcode, 0, 24, "CALL NZ, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
             }
@@ -966,13 +966,13 @@ impl Cpu {
             0xdc => {
                 if self.get_flag(Flag::C) {
                     self.call_a16(mem);
-                    return Instruction::Ok(opcode, 3, 24, "CALL C, a16");
+                    return Instruction::Ok(opcode, 0, 24, "CALL C, a16");
                 }
                 Instruction::Ok(opcode, 3, 12, "CALL C, a16")
             }
             0xdd => {
                 self.call_a16(mem);
-                return Instruction::Ok(opcode, 3, 24, "CALL a16");
+                return Instruction::Ok(opcode, 0, 24, "CALL a16");
             }
             0xde => {
                 self.sbc_a(self.get_n(mem));

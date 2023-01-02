@@ -1,16 +1,18 @@
 mod gpu;
 mod gpu_test;
-mod mbc;
+mod rom;
 mod mem_test;
 mod mmu;
 mod sound;
 
-use std::ops::Shl;
+use std::{fs::File, io::Write, ops::Shl};
 
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 
-use self::{gpu::Gpu, mbc::Mbc, mmu::Mmu, sound::Sound};
+use crate::video::{SCREEN_HEIGHT, SCREEN_WIDTH};
+
+use self::{gpu::Gpu, rom::Rom, mmu::Mmu, sound::Sound};
 
 const DIVIDER_ADD: i16 = 16384;
 
@@ -37,7 +39,7 @@ struct DivRegister {
 }
 
 pub struct Memory {
-    mbc: Mbc,
+    rom_ram: Rom,
     mmu: Mmu,
     gpu: Gpu,
     snd: Sound,
@@ -57,9 +59,9 @@ pub struct Memory {
 impl MemoryType for Memory {
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
-            0x0000..=0x7fff => self.mbc.read_byte(addr),
+            0x0000..=0x7fff => self.rom_ram.read_byte(addr),
             0x8000..=0x9fff => self.gpu.read_byte(addr),
-            0xa000..=0xfdff => self.mmu.read_byte(addr),
+            0xa000..=0xfdff => self.rom_ram.read_byte(addr),
             0xfe00..=0xfe9f => self.gpu.read_byte(addr),
             0xfea0..=0xfeff => {
                 println!("Reading from empty but unusable for I/O");
@@ -90,7 +92,7 @@ impl MemoryType for Memory {
 
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000..=0x7fff => self.mbc.write_byte(addr, val),
+            0x0000..=0x7fff => self.rom_ram.write_byte(addr, val),
             0x8000..=0x9fff => self.gpu.write_byte(addr, val),
             0xa000..=0xfdff => self.mmu.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
@@ -116,7 +118,7 @@ impl MemoryType for Memory {
 impl Memory {
     pub fn new() -> Memory {
         let mut mem = Memory {
-            mbc: Mbc::new(),
+            rom_ram: Rom::new(),
             mmu: Mmu::new(),
             gpu: Gpu::new(),
             snd: Sound::new(),
@@ -139,7 +141,7 @@ impl Memory {
     }
 
     pub fn load(&mut self, data: Vec<u8>) {
-        self.mbc.load(&data);
+        self.rom_ram.load(&data);
     }
     pub fn reset(&mut self) {
         self.write_byte(0xFF05, 0x00); //TIMA
@@ -215,5 +217,61 @@ impl Memory {
         }
 
         return overflow;
+    }
+
+    fn color_to_char(color: &gpu::GBColor) -> String {
+        match color {
+            gpu::GBColor::White => "W".to_string(),
+            gpu::GBColor::LightGray => "L".to_string(),
+            gpu::GBColor::DarkGray => "D".to_string(),
+            gpu::GBColor::Black => "B".to_string(),
+        }
+    }
+
+    pub(crate) fn dump_bg_tiles(&self) {
+        let bg_tiles = self.gpu.get_bg_tiles();
+        let mut file = File::create("bg_tiles.txt").unwrap();
+        for i in (0..bg_tiles.len()).step_by(4) {
+            file.write(
+                format!(
+                    "Tile {0} \t Tile {1} \t Tile {2} \t Tile {3}\n",
+                    i,
+                    i + 1,
+                    i + 2,
+                    i + 3
+                )
+                .as_bytes(),
+            );
+            for y in 0..8 {
+                for j in i..i + 4 {
+                    for x in 0..8 {
+                        file.write(format!("{}", Self::color_to_char(&bg_tiles[j][y][x])).as_bytes());
+                    }
+                    file.write("\t".as_bytes());
+                }
+                file.write("\n".as_bytes());
+            }
+            file.write("\n".as_bytes());
+        }
+
+        file.write("tilemap 0x9800\n".as_bytes());
+        for i in (0x9800..=0x9fff - 10).step_by(10) {
+            for j in 0..10 {
+                file.write(format!("{0},", self.gpu.read_byte(i + j)).as_bytes());
+            }
+            if i + 10 < 0x9fff {
+                file.write(format!("\ntilemap {0:#0x}\n", i + 10).as_bytes());
+            }
+        }
+        file.write("\n".as_bytes());
+
+        for y in 0..SCREEN_HEIGHT {
+            for x in 0..SCREEN_WIDTH {
+                file.write(format!("{}", Self::color_to_char(&self.gpu.get_pixel(x, y))).as_bytes());
+            }
+            file.write("\n".as_bytes());
+        }
+
+        println!("tiles dumped to bg_tiles.txt");
     }
 }
