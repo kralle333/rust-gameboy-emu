@@ -153,7 +153,7 @@ impl Cpu {
     }
 
     pub fn call_a16(&mut self, mem: &mut Memory) {
-        self.push_sp(mem, self.PC+3);
+        self.push_sp(mem, self.PC+2);
         self.PC = self.get_nn(mem);
     }
 

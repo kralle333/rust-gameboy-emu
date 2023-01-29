@@ -234,7 +234,7 @@ impl Cpu {
             }
             Instruction::Invalid(opcode) => println!("invalid upcode {opcode}"),
         }
-        self.check_interrupt_status(mem, opcode);
+        //self.check_interrupt_status(mem, opcode);
     }
 
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {
@@ -271,6 +271,7 @@ impl Cpu {
                 4 => restart_address = 0x60,
                 _ => panic!("unknown flag"),
             }
+            println!("Firing interrupt {restart_address}");
             self.rst(mem, restart_address);
         }
     }
