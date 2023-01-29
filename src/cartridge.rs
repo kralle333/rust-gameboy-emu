@@ -34,26 +34,30 @@ impl Cartridge {
         };
         cartridge.cartidge_type = CartridgeType::from_u32(data[0x147] as u32);
 
-        cartridge.rom_bank_size = KB
-            * match data[0x148] {
-                0 => 32,
-                1 => 64,
-                2 => 128,
-                3 => 256,
-                4 => 512,
-                5 => KB,
-                6 => KB * 2,
-                _ => unimplemented!(),
-            };
-        cartridge.ram_bank_size = KB
-            * match data[0x149] {
-                0 => 0,
-                1 => 2,
-                2 => 8,
-                3 => 32,
-                4 => 128,
-                _ => unimplemented!(),
-            };
+        cartridge.rom_bank_size = match data[0x148] {
+            0 => 32 * KB,
+            1 => 64 * KB,
+            2 => 128 * KB,
+            3 => 256 * KB,
+            4 => 512 * KB,
+            5 => KB * KB,
+            6 => KB * KB * 2,
+            x => {
+                println!("unknown rom_bank type {x}");
+                data.len()
+            }
+        };
+        cartridge.ram_bank_size = match data[0x149] {
+            0 => 2 * KB,
+            1 => 2 * KB,
+            2 => 8 * KB,
+            3 => 32 * KB,
+            4 => 128 * KB,
+            x => {
+                println!("unknown ram_bank type {x}, defaulting to 128");
+                128 * KB
+            }
+        };
         cartridge
     }
 }

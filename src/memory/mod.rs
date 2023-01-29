@@ -147,6 +147,7 @@ impl Memory {
         self.rom.load(&data, cartridge_info);
     }
     pub fn reset(&mut self) {
+        self.write_byte(0xFF00, 0x0F); //0x0F no buttons pressed
         self.write_byte(0xFF05, 0x00); //TIMA
         self.write_byte(0xFF06, 0x00); //TMA
         self.write_byte(0xFF07, 0x00); //TAC
@@ -244,39 +245,39 @@ impl Memory {
                     i + 3
                 )
                 .as_bytes(),
-            );
+            ).unwrap();
             for y in 0..8 {
                 for j in i..i + 4 {
                     for x in 0..8 {
                         file.write(
                             format!("{}", Self::color_to_char(&bg_tiles[j][y][x])).as_bytes(),
-                        );
+                        ).unwrap();
                     }
-                    file.write("\t".as_bytes());
+                    file.write("\t".as_bytes()).unwrap();
                 }
-                file.write("\n".as_bytes());
+                file.write("\n".as_bytes()).unwrap();
             }
-            file.write("\n".as_bytes());
+            file.write("\n".as_bytes()).unwrap();
         }
 
-        file.write("tilemap 0x9800\n".as_bytes());
+        file.write("tilemap 0x9800\n".as_bytes()).unwrap();
         for i in (0x9800..=0x9fff - 10).step_by(10) {
             for j in 0..10 {
-                file.write(format!("{0},", self.gpu.read_byte(i + j)).as_bytes());
+                file.write(format!("{0},", self.gpu.read_byte(i + j)).as_bytes()).unwrap();
             }
             if i + 10 < 0x9fff {
-                file.write(format!("\ntilemap {0:#0x}\n", i + 10).as_bytes());
+                file.write(format!("\ntilemap {0:#0x}\n", i + 10).as_bytes()).unwrap();
             }
         }
-        file.write("\n".as_bytes());
+        file.write("\n".as_bytes()).unwrap();
 
         for y in 0..SCREEN_HEIGHT {
             for x in 0..SCREEN_WIDTH {
                 file.write(
                     format!("{}", Self::color_to_char(&self.gpu.get_pixel(x, y))).as_bytes(),
-                );
+                ).unwrap();
             }
-            file.write("\n".as_bytes());
+            file.write("\n".as_bytes()).unwrap();
         }
 
         println!("tiles dumped to bg_tiles.txt");
