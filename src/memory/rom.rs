@@ -2,8 +2,6 @@ use crate::cartridge::{Cartridge, CartridgeType};
 
 use super::MemoryType;
 
-const KB: usize = 1024;
-
 #[derive(PartialEq)]
 enum MbcMode {
     None,

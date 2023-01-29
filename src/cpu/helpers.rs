@@ -148,12 +148,12 @@ impl Cpu {
         mem.write_word(self.SP, rcv);
     }
 
-    pub fn ret(&mut self, mem: &mut Memory){
+    pub fn ret(&mut self, mem: &mut Memory) {
         self.PC = self.pop_sp(mem);
     }
 
     pub fn call_a16(&mut self, mem: &mut Memory) {
-        self.push_sp(mem, self.PC+2);
+        self.push_sp(mem, self.PC + 2);
         self.PC = self.get_nn(mem);
     }
 
