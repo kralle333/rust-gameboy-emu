@@ -1,46 +1,7 @@
-use sdl2::{pixels::Color, rect::Rect, render::Canvas, video::Window};
+use sdl2::{rect::Rect, render::Canvas, video::Window};
 
 use super::MemoryType;
-use crate::video::{self, SCREEN_HEIGHT, SCREEN_WIDTH};
-
-enum ColorScheme {
-    Green,
-    BlackWhite,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum GBColor {
-    White = 0,
-    LightGray = 1,
-    DarkGray = 2,
-    Black = 3,
-}
-
-fn byte_to_color(val: u8) -> GBColor {
-    match val {
-        0 => GBColor::White,
-        1 => GBColor::LightGray,
-        2 => GBColor::DarkGray,
-        3 => GBColor::Black,
-        _ => panic!("what"),
-    }
-}
-
-fn get_color(color: &GBColor, scheme: &ColorScheme) -> Color {
-    match scheme {
-        ColorScheme::Green => match color {
-            GBColor::White => Color::RGBA(0x9C, 0xBD, 0x0F, 0xFF),
-            GBColor::LightGray => Color::RGBA(0x8C, 0xAD, 0x0F, 0xFF),
-            GBColor::DarkGray => Color::RGBA(0x30, 0x62, 0x30, 0xFF),
-            GBColor::Black => Color::RGBA(0x0F, 0x38, 0x0F, 0xFF),
-        },
-        ColorScheme::BlackWhite => match color {
-            GBColor::White => Color::RGBA(0xFF, 0xFF, 0xFF, 0xFF),
-            GBColor::LightGray => Color::RGBA(0x8C, 0x8C, 0x8C, 0xFF),
-            GBColor::DarkGray => Color::RGBA(0x30, 0x30, 0x30, 0xFF),
-            GBColor::Black => Color::RGBA(0, 0, 0, 0xFF),
-        },
-    }
-}
+use crate::video::{self, GBColor, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 #[derive(Debug, PartialEq)]
 pub enum TickMode {
@@ -241,24 +202,23 @@ impl Gpu {
         if addr & 1 == 1 {
             addr -= 1;
         } //Because each line is represented as 2 lines, start with the first one
-        let tile = addr >> 4; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
+        let tile = addr / 16; // shift 4=div 16 - Each tile is 16 byte - 256x2 tiles
 
         let y = (addr >> 1) & 7;
-        let mut sx;
-        let mut bit_value1 = 0;
-        let mut bit_value2 = 0;
+
+        let mut resulting_color: u8;
         for x in 0..8 {
-            sx = 1 << (7 - x);
+            let sx = 1 << (7 - x);
+            resulting_color = 0;
             if (self.vram[addr as usize] & sx) > 0 {
-                bit_value1 = 1;
+                resulting_color += 1;
             }
             if (self.vram[(addr + 1) as usize] & sx) > 0 {
-                bit_value2 = 2;
+                resulting_color += 2;
             }
-            let result = bit_value1 + bit_value2;
 
             self.bg_tiles[tile as usize][y as usize][x as usize] =
-                byte_to_color(bit_value1 + bit_value2);
+                video::byte_to_color(resulting_color);
         }
     }
     fn update_object_data(&mut self, addr: u16, val: u8) {
@@ -281,7 +241,7 @@ impl Gpu {
         //println!("updating palette: {0:?} to {1:#04b}", pal, val);
         for i in 0..4 {
             let new_color = (val >> (i * 2)) & 0b11;
-            palette[i] = byte_to_color(new_color);
+            palette[i] = video::byte_to_color(new_color);
         }
         match pal {
             PaletteType::Background => self.background_palette = palette,
@@ -295,9 +255,9 @@ impl Gpu {
             return false;
         }
         self.can_draw = false;
-        let scheme = &ColorScheme::BlackWhite;
+        let scheme = &video::ColorScheme::BlackWhite;
         for i in 0..SCREEN_WIDTH * SCREEN_HEIGHT {
-            let color = get_color(&self.pixels[i], scheme);
+            let color = video::get_color(&self.pixels[i], scheme);
             canvas.set_draw_color(color);
             let x = (i % SCREEN_WIDTH) * video::PIXEL_SIZE;
             let y = (i / SCREEN_WIDTH) * video::PIXEL_SIZE;

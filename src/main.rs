@@ -8,7 +8,7 @@ mod video;
 
 extern crate sdl2;
 
-use sdl2::event::Event;
+use sdl2::{event::Event, pixels::Color};
 
 use std::time::Duration;
 
@@ -30,7 +30,7 @@ pub fn main() {
     let breakpoint = if breakpoint_str.is_empty() {
         0x0
     } else {
-        match u16::from_str_radix(&breakpoint_str.trim_start_matches("0x"), 16){
+        match u16::from_str_radix(&breakpoint_str.trim_start_matches("0x"), 16) {
             Ok(addr) => addr,
             Err(err) => panic!("invalid breakpoint {breakpoint_str} err: {err}"),
         }
@@ -49,6 +49,11 @@ pub fn main() {
         (video::SCREEN_HEIGHT * video::PIXEL_SIZE) as u32,
     );
 
+    let mut debug_canvas = sdl.get_window_canvas("tiles", 384*2, 500);
+
+    debug_canvas.clear();
+    debug_canvas.present();
+
     'running: loop {
         input.set_prev_keys();
         let events = sdl.get_events();
@@ -60,9 +65,15 @@ pub fn main() {
         }
 
         emulator.tick(&input);
+        canvas.set_draw_color(Color::BLACK);
         canvas.clear();
         if emulator.draw(&mut canvas) {
             canvas.present();
+        }
+        debug_canvas.set_draw_color(Color::BLACK);
+        debug_canvas.clear();
+        if emulator.draw_debug(&mut debug_canvas) {
+            debug_canvas.present();
         }
         //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 1000));
     }

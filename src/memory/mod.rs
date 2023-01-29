@@ -12,10 +12,10 @@ use sdl2::video::Window;
 
 use crate::{
     cartridge::Cartridge,
-    video::{SCREEN_HEIGHT, SCREEN_WIDTH},
+    video::{SCREEN_HEIGHT, SCREEN_WIDTH, self},
 };
 
-use self::{gpu::Gpu, mmu::Mmu, rom::Rom, sound::Sound};
+use self::{gpu::{Gpu}, mmu::Mmu, rom::Rom, sound::Sound};
 
 const DIVIDER_ADD: i16 = 16384;
 
@@ -223,16 +223,16 @@ impl Memory {
         return overflow;
     }
 
-    fn color_to_char(color: &gpu::GBColor) -> String {
+    fn color_to_char(color: &video::GBColor) -> String {
         match color {
-            gpu::GBColor::White => "W".to_string(),
-            gpu::GBColor::LightGray => "L".to_string(),
-            gpu::GBColor::DarkGray => "D".to_string(),
-            gpu::GBColor::Black => "B".to_string(),
+            video::GBColor::White => "W".to_string(),
+            video::GBColor::LightGray => "L".to_string(),
+            video::GBColor::DarkGray => "D".to_string(),
+            video::GBColor::Black => "B".to_string(),
         }
     }
 
-    pub(crate) fn dump_bg_tiles(&self) {
+    pub(crate) fn write_bg_tiles_to_file(&self) {
         let bg_tiles = self.gpu.get_bg_tiles();
         let mut file = File::create("bg_tiles.txt").unwrap();
         for i in (0..bg_tiles.len()).step_by(4) {
@@ -281,5 +281,9 @@ impl Memory {
         }
 
         println!("tiles dumped to bg_tiles.txt");
+    }
+
+    pub fn dump_bg_tiles(&self) ->  &[[[video::GBColor; 8]; 8]; 384] {
+        self.gpu.get_bg_tiles()
     }
 }

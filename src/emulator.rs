@@ -1,5 +1,6 @@
 use std::fs;
 
+use sdl2::rect::{Point, Rect};
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 
@@ -7,6 +8,7 @@ use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
 use crate::memory::Memory;
+use crate::video;
 
 #[derive(PartialEq)]
 enum DebugMode {
@@ -22,6 +24,7 @@ pub struct Emulator {
     debug_mode: DebugMode,
     loaded_rom: String,
     step_one: bool,
+    draw_tiles: bool,
 }
 
 #[derive(Default)]
@@ -50,6 +53,7 @@ impl Emulator {
             debug_mode: mode,
             loaded_rom: "".to_string(),
             step_one: false,
+            draw_tiles: false,
         }
     }
     fn get_initial_debug_mode(config: &Config) -> DebugMode {
@@ -86,6 +90,42 @@ impl Emulator {
         return self.memory.draw(canvas);
     }
 
+    pub fn draw_debug(&mut self, canvas: &mut Canvas<Window>) -> bool {
+        if !self.draw_tiles {
+            return false;
+        }
+        let bg_tiles = self.memory.dump_bg_tiles();
+        let mut x_offset = 0;
+        let mut y_offset = 0;
+        for tile in bg_tiles {
+            for x in 0..8 {
+                for y in 0..8 {
+                    let c = video::get_color(
+                        &tile[y as usize][x as usize],
+                        &video::ColorScheme::BlackWhite,
+                    );
+                    canvas.set_draw_color(c);
+                    match canvas.fill_rect(Rect::new(
+                        x_offset + x * video::PIXEL_SIZE as i32,
+                        y_offset + y * video::PIXEL_SIZE as i32,
+                        video::PIXEL_SIZE as u32,
+                        video::PIXEL_SIZE as u32,
+                    )) {
+                        Ok(_) => {}
+                        Err(err) => panic!("{err}"),
+                    }
+                }
+            }
+            x_offset += 8 * video::PIXEL_SIZE as i32;
+            if x_offset > 384*2 {
+                x_offset = 0;
+                y_offset += 8 * video::PIXEL_SIZE as i32;
+            }
+        }
+        self.draw_tiles = false;
+        true
+    }
+
     pub fn reset(&mut self) {
         self.cpu.reset();
         self.memory.reset();
@@ -97,7 +137,8 @@ impl Emulator {
             return false;
         }
         if keys.is_new_down(&Button::DumpBgTiles) {
-            self.memory.dump_bg_tiles();
+            //self.memory.dump_bg_tiles();
+            self.draw_tiles = true;
             return false;
         }
         if keys.is_new_down(&Button::Step) {
