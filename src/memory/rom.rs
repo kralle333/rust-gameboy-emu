@@ -63,7 +63,7 @@ impl Rom {
         Self {
             rom: Vec::new(),
             external_ram: Vec::new(),
-            rom_offset: 0,
+            rom_offset: 0x4000,
             ram_offset: 0,
             internal_ram: [0; 0x2000],
             high_ram: [0; 0x7f],
@@ -82,6 +82,7 @@ impl Rom {
                     rom_bank = 1;
                 }
                 self.rom_offset = match self.mbc_mode {
+                    MbcMode::None => 0x4000,
                     MbcMode::Mbc1_16mbRom8kbRam => (rom_bank as usize) * 0x4000,
                     MbcMode::Mbc1_4mbRom32kbRam => (rom_bank as usize) * 4 * 0x1000,
                     _ => unimplemented!(),

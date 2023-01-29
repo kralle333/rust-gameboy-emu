@@ -30,9 +30,9 @@ pub fn main() {
     let breakpoint = if breakpoint_str.is_empty() {
         0x0
     } else {
-        match breakpoint_str.parse::<u16>() {
+        match u16::from_str_radix(&breakpoint_str.trim_start_matches("0x"), 16){
             Ok(addr) => addr,
-            Err(err) => panic!("invalid breakpoint {err}"),
+            Err(err) => panic!("invalid breakpoint {breakpoint_str} err: {err}"),
         }
     };
 
