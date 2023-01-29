@@ -1,8 +1,8 @@
 mod gpu;
 mod gpu_test;
-mod rom;
 mod mem_test;
 mod mmu;
+mod rom;
 mod sound;
 
 use std::{fs::File, io::Write, ops::Shl};
@@ -10,9 +10,12 @@ use std::{fs::File, io::Write, ops::Shl};
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 
-use crate::video::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::{
+    cartridge::Cartridge,
+    video::{SCREEN_HEIGHT, SCREEN_WIDTH},
+};
 
-use self::{gpu::Gpu, rom::Rom, mmu::Mmu, sound::Sound};
+use self::{gpu::Gpu, mmu::Mmu, rom::Rom, sound::Sound};
 
 const DIVIDER_ADD: i16 = 16384;
 
@@ -39,8 +42,8 @@ struct DivRegister {
 }
 
 pub struct Memory {
-    rom_ram: Rom,
-    mmu: Mmu,
+    rom: Rom,
+    ram: Mmu,
     gpu: Gpu,
     snd: Sound,
     interupt_enable: u8,
@@ -59,9 +62,9 @@ pub struct Memory {
 impl MemoryType for Memory {
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
-            0x0000..=0x7fff => self.rom_ram.read_byte(addr),
+            0x0000..=0x7fff => self.rom.read_byte(addr),
             0x8000..=0x9fff => self.gpu.read_byte(addr),
-            0xa000..=0xfdff => self.rom_ram.read_byte(addr),
+            0xa000..=0xfdff => self.rom.read_byte(addr),
             0xfe00..=0xfe9f => self.gpu.read_byte(addr),
             0xfea0..=0xfeff => {
                 println!("Reading from empty but unusable for I/O");
@@ -77,7 +80,7 @@ impl MemoryType for Memory {
             0xff0f => self.interupt_flag,
             0xff10..=0xff3f => self.snd.read_byte(addr),
             0xff40..=0xff4b => self.gpu.read_byte(addr),
-            0xff80..=0xfffe => self.mmu.read_byte(addr),
+            0xff80..=0xfffe => self.rom.read_byte(addr),
             0xff4c..=0xff7f => {
                 println!("Reading from empty but unusable for I/O");
                 0
@@ -92,9 +95,9 @@ impl MemoryType for Memory {
 
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000..=0x7fff => self.rom_ram.write_byte(addr, val),
+            0x0000..=0x7fff => self.rom.write_byte(addr, val),
             0x8000..=0x9fff => self.gpu.write_byte(addr, val),
-            0xa000..=0xfdff => self.mmu.write_byte(addr, val),
+            0xa000..=0xfdff => self.rom.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
             0xfea0..=0xfeff => println!("Writing to empty but unusable for I/O"),
             0xff00 => self.joypad = val,
@@ -108,7 +111,7 @@ impl MemoryType for Memory {
             0xff10..=0xff3f => self.snd.write_byte(addr, val),
             0xff40..=0xff4b => self.gpu.write_byte(addr, val),
             0xff4c..=0xff7f => println!("Writing to empty but unusable for I/O"),
-            0xff80..=0xfffe => self.mmu.write_byte(addr, val),
+            0xff80..=0xfffe => self.rom.write_byte(addr, val),
             0xffff => self.interupt_enable = val,
             _ => println!("unused {}", addr),
         }
@@ -118,8 +121,8 @@ impl MemoryType for Memory {
 impl Memory {
     pub fn new() -> Memory {
         let mut mem = Memory {
-            rom_ram: Rom::new(),
-            mmu: Mmu::new(),
+            rom: Rom::new(),
+            ram: Mmu::new(),
             gpu: Gpu::new(),
             snd: Sound::new(),
             interupt_enable: 0,
@@ -140,8 +143,8 @@ impl Memory {
         mem
     }
 
-    pub fn load(&mut self, data: Vec<u8>) {
-        self.rom_ram.load(&data);
+    pub fn load(&mut self, data: Vec<u8>, cartridge_info: &Cartridge) {
+        self.rom.load(&data, cartridge_info);
     }
     pub fn reset(&mut self) {
         self.write_byte(0xFF05, 0x00); //TIMA
@@ -245,7 +248,9 @@ impl Memory {
             for y in 0..8 {
                 for j in i..i + 4 {
                     for x in 0..8 {
-                        file.write(format!("{}", Self::color_to_char(&bg_tiles[j][y][x])).as_bytes());
+                        file.write(
+                            format!("{}", Self::color_to_char(&bg_tiles[j][y][x])).as_bytes(),
+                        );
                     }
                     file.write("\t".as_bytes());
                 }
@@ -267,7 +272,9 @@ impl Memory {
 
         for y in 0..SCREEN_HEIGHT {
             for x in 0..SCREEN_WIDTH {
-                file.write(format!("{}", Self::color_to_char(&self.gpu.get_pixel(x, y))).as_bytes());
+                file.write(
+                    format!("{}", Self::color_to_char(&self.gpu.get_pixel(x, y))).as_bytes(),
+                );
             }
             file.write("\n".as_bytes());
         }

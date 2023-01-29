@@ -168,7 +168,9 @@ impl MemoryType for Gpu {
                 }
                 0x42 => self.scroll_y = val,
                 0x43 => self.scroll_x = val,
-                0x44 => self.vert_line = val,
+                0x44 => {
+                    println!("vertline read only!")
+                }
                 0x45 => self.vert_line_cp = val,
                 0x46 => self.dma_write_addr = val,
                 0x47 => {
@@ -385,13 +387,13 @@ impl Gpu {
         }
 
         // Which line of tiles to use in the map
-        map_offs += (((self.vert_line + self.scroll_y) >> 3) as u16) << 5;
+        map_offs += (((self.vert_line.wrapping_add(self.scroll_y)) >> 3) as u16) << 5;
 
         // Which tile to start with in the map line
-        let mut line_offset: u16 = (self.scroll_x as u16 >> 3);
+        let mut line_offset: u16 = self.scroll_x as u16 >> 3;
 
         // Which line of pixels to use in the tiles
-        let y = ((self.vert_line + self.scroll_y) & 7) as usize;
+        let y = ((self.vert_line.wrapping_add(self.scroll_y)) & 7) as usize;
         // Where in the tileline to start
         let mut x = (self.scroll_x & 7) as usize;
 

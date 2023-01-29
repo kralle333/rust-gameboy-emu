@@ -3,9 +3,12 @@ mod tests {
     use rand::Rng;
 
     use crate::{
+        cartridge::Cartridge,
         cpu::{self, Cpu, Flag, Instruction, Register},
         memory::{self, Memory, MemoryType},
     };
+
+    const INTERNAL_RAM: u16 = 0xc000;
 
     #[derive(Clone, Copy)]
     enum Register16 {
@@ -25,15 +28,30 @@ mod tests {
 
     impl Tester {
         fn new() -> Tester {
-            Tester {
+            let mut t = Tester {
                 cpu: Cpu::new(),
                 mem: Memory::new(),
                 rand: rand::thread_rng(),
-            }
+            };
+            t.mem.load(
+                vec![0; 32768],
+                &Cartridge {
+                    cartidge_type: crate::cartridge::CartridgeType::RomOnly,
+                    rom_bank_size: 32768,
+                    ram_bank_size: 0,
+                },
+            );
+            t
+        }
+        fn run_with_a16(&mut self, opcode: u8, a16: u16) {
+            self.mem.write_byte(0xc000, opcode); // 0xc000 = internal_ram
+            self.mem.write_word(0xc001, a16);
+            self.cpu.PC = 0xc000;
+            self.cpu.fetch_decode(&mut self.mem);
         }
         fn run(&mut self, opcode: u8) {
-            self.mem.write_byte(0x0000, opcode);
-            self.cpu.PC = 0x0000;
+            self.mem.write_byte(0xc000, opcode); // 0xc000 = internal_ram
+            self.cpu.PC = 0xc000;
             self.cpu.fetch_decode(&mut self.mem);
         }
         fn assert_eq_flag(&self, flag: Flag, set: bool) {
@@ -74,20 +92,14 @@ mod tests {
         }
         fn test_opcode_reg_16(&mut self, opcode: u8, reg: Register16) {
             let rand_value = self.rand.gen_range(0..=0xFFFF);
-            self.mem.write_byte(0x0000, opcode);
-            self.mem.write_word(0x0001, rand_value);
-            self.cpu.PC = 0x0000;
-            self.cpu.fetch_decode(&mut self.mem);
+            self.run_with_a16(opcode, rand_value);
             let target = self.get_register16(reg);
             assert_eq!(target, rand_value);
         }
         fn test_opcode_reg_load_at_addr(&mut self, opcode: u8, target: Register, address: u16) {
             let rand_value = self.rand.gen_range(0..0xFF);
             self.mem.write_byte(address, rand_value);
-            self.mem.write_byte(0x0000, opcode);
-            self.mem.write_word(0x0001, 0x1212);
-            self.cpu.PC = 0x0000;
-            self.cpu.fetch_decode(&mut self.mem);
+            self.run_with_a16(opcode, 0x1212);
             assert_eq!(self.cpu.get_reg(target), rand_value);
         }
         fn test_opcode_reg_load(&mut self, opcode: u8, target: Register, source: Register) {
@@ -141,7 +153,7 @@ mod tests {
         t.cpu.AF = 0;
         t.cpu.set_b(0x90);
         t.cpu.cp_a(t.cpu.get_b());
-        println!("t.cpu.get_f(): {}",t.cpu.get_f());
+        println!("t.cpu.get_f(): {}", t.cpu.get_f());
         t.assert_eq_flag(Flag::Z, false);
         t.assert_eq_flag(Flag::N, true);
         t.assert_eq_flag(Flag::H, false);
@@ -299,6 +311,7 @@ mod tests {
         t.test_opcode_reg_load(0x43, Register::B, Register::E);
         t.test_opcode_reg_load(0x44, Register::B, Register::H);
         t.test_opcode_reg_load(0x45, Register::B, Register::L);
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.test_opcode_reg_load_at_addr(0x46, Register::B, t.get_register16(Register16::HL));
         t.test_opcode_reg_load(0x47, Register::B, Register::A);
 
@@ -308,6 +321,7 @@ mod tests {
         t.test_opcode_reg_load(0x4b, Register::C, Register::E);
         t.test_opcode_reg_load(0x4c, Register::C, Register::H);
         t.test_opcode_reg_load(0x4d, Register::C, Register::L);
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.test_opcode_reg_load_at_addr(0x4e, Register::C, t.get_register16(Register16::HL));
         t.test_opcode_reg_load(0x4f, Register::C, Register::A);
 
@@ -317,6 +331,7 @@ mod tests {
         t.test_opcode_reg_load(0x53, Register::D, Register::E);
         t.test_opcode_reg_load(0x54, Register::D, Register::H);
         t.test_opcode_reg_load(0x55, Register::D, Register::L);
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.test_opcode_reg_load_at_addr(0x56, Register::D, t.get_register16(Register16::HL));
         t.test_opcode_reg_load(0x57, Register::D, Register::A);
 
@@ -326,6 +341,7 @@ mod tests {
         t.test_opcode_reg_load(0x5b, Register::E, Register::E);
         t.test_opcode_reg_load(0x5c, Register::E, Register::H);
         t.test_opcode_reg_load(0x5d, Register::E, Register::L);
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.test_opcode_reg_load_at_addr(0x5e, Register::E, t.get_register16(Register16::HL));
         t.test_opcode_reg_load(0x5f, Register::E, Register::A);
 
@@ -335,6 +351,7 @@ mod tests {
         t.test_opcode_reg_load(0x63, Register::H, Register::E);
         t.test_opcode_reg_load(0x64, Register::H, Register::H);
         t.test_opcode_reg_load(0x65, Register::H, Register::L);
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.test_opcode_reg_load_at_addr(0x66, Register::H, t.get_register16(Register16::HL));
         t.test_opcode_reg_load(0x67, Register::H, Register::A);
 
@@ -344,46 +361,53 @@ mod tests {
         t.test_opcode_reg_load(0x6b, Register::L, Register::E);
         t.test_opcode_reg_load(0x6c, Register::L, Register::H);
         t.test_opcode_reg_load(0x6d, Register::L, Register::L);
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.test_opcode_reg_load_at_addr(0x6e, Register::L, t.get_register16(Register16::HL));
         t.test_opcode_reg_load(0x6f, Register::L, Register::A);
+    }
+
+    #[test]
+    fn test_pop() {
+        let mut t = Tester::new();
+
+        t.mem.write_word(INTERNAL_RAM, 0x1234);
+        t.set_register16(Register16::SP, INTERNAL_RAM);
+        t.cpu.BC = t.cpu.pop_sp(&mut t.mem);
+        assert_eq!(t.cpu.BC, 0x1234);
+        assert_eq!(t.cpu.SP, INTERNAL_RAM + 2);
     }
 
     #[test]
     fn test_jumps() {
         //0xc3 JP ad8
         let mut t = Tester::new();
-
-        t.mem.write_byte(0x0, 0xc3);
-        t.mem.write_word(0x1, 0x0108);
-        t.run(0xc3);
+        t.run_with_a16(0xc3, 0x0108);
         assert_eq!(t.cpu.PC, 0x108);
     }
     #[test]
     fn test_push_pop_stack() {
-        let mut c = cpu::Cpu::new();
-        let mut mem = memory::Memory::new();
+        let mut t = Tester::new();
+        t.mem.write_word(t.cpu.SP, 0);
 
-        mem.write_word(c.SP, 0);
-
-        c.push_sp(&mut mem, 0x1234);
-        let v = c.pop_sp(&mem);
+        t.cpu.push_sp(&mut t.mem, 0x1234);
+        let v = t.cpu.pop_sp(&t.mem);
 
         assert_eq!(v, 0x1234);
     }
     #[test]
     fn test_hl_plus_minus() {
         let mut t = Tester::new();
-        t.cpu.HL = 0x1000;
+        t.cpu.HL = INTERNAL_RAM;
         t.cpu.set_a(0x66);
 
         t.run(0x22);
-        assert_eq!(0x66, t.mem.read_byte(0x1000));
-        assert_eq!(t.cpu.HL, 0x1001);
+        assert_eq!(0x66, t.mem.read_byte(INTERNAL_RAM));
+        assert_eq!(t.cpu.HL, INTERNAL_RAM + 1);
 
-        t.cpu.HL = 0x2000;
+        t.cpu.HL = INTERNAL_RAM + 100;
         t.cpu.set_a(0x69);
         t.run(0x32);
-        assert_eq!(0x69, t.mem.read_byte(0x2000));
-        assert_eq!(t.cpu.HL, 0x1fff);
+        assert_eq!(0x69, t.mem.read_byte(INTERNAL_RAM + 100));
+        assert_eq!(t.cpu.HL, INTERNAL_RAM + 99);
     }
 }

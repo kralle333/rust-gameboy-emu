@@ -1,3 +1,4 @@
+mod cartridge;
 mod cpu;
 mod emulator;
 mod input;
@@ -11,23 +12,23 @@ use sdl2::event::Event;
 
 use std::time::Duration;
 
+fn arg_to_bool(arg: &str) -> bool {
+    match arg {
+        "true" => true,
+        _ => false,
+    }
+}
+
 pub fn main() {
     //Rewrite this into some kind of emulator config
     let rom_path = std::env::args().nth(1).expect("no rom path given");
 
-    let print_cpu = match std::env::args().nth(2).unwrap_or_default().as_str() {
-        "true" => true,
-        _ => false,
-    };
-
-    let use_stepping = match std::env::args().nth(3).unwrap_or_default().as_str() {
-        "true" => true,
-        _ => false,
-    };
+    let print_cpu = arg_to_bool(std::env::args().nth(2).unwrap_or_default().as_str());
+    let use_stepping = arg_to_bool(std::env::args().nth(3).unwrap_or_default().as_str());
 
     let breakpoint_str = format!("{}", std::env::args().nth(4).unwrap_or_default());
     let breakpoint = if breakpoint_str.is_empty() {
-        0x0040
+        0x0
     } else {
         match breakpoint_str.parse::<u16>() {
             Ok(addr) => addr,

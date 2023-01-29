@@ -3,6 +3,7 @@ use std::fs;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 
+use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
 use crate::memory::Memory;
@@ -61,9 +62,17 @@ impl Emulator {
         }
     }
     pub fn load_rom(&mut self, file_path: &String) {
-        let result = fs::read(file_path).expect("file not found");
         println!("Loading rom {file_path}");
-        self.memory.load(result);
+        let result = fs::read(file_path).expect("file not found");
+        let cartridge = Cartridge::new(&result);
+        println!(
+            "Success: Rom Size {0}KB Ram {1}KB, Catridge {2:?}",
+            cartridge.rom_bank_size / 1024,
+            cartridge.ram_bank_size / 1024,
+            cartridge.cartidge_type
+        );
+
+        self.memory.load(result, &cartridge);
         self.loaded_rom = file_path.to_string();
     }
 

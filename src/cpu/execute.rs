@@ -823,7 +823,7 @@ impl Cpu {
             }
             0xc0 => {
                 if !self.get_flag(Flag::Z) {
-                    self.PC = self.pop_sp(mem);
+                    self.ret(mem);
                     return Instruction::Ok(opcode, 0, 20, "RET NZ");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET NZ")
@@ -865,14 +865,14 @@ impl Cpu {
             }
             0xc8 => {
                 if self.get_flag(Flag::Z) {
-                    self.PC = self.pop_sp(mem);
+                    self.ret(mem);
                     return Instruction::Ok(opcode, 1, 20, "RET Z");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET Z")
             }
             0xc9 => {
-                self.PC = self.pop_sp(mem);
-                return Instruction::Ok(opcode, 0, 4, "RET");
+                self.ret(mem);
+                return Instruction::Ok(opcode, 1, 4, "RET");
             }
             0xca => {
                 if self.get_flag(Flag::Z) {
@@ -903,7 +903,7 @@ impl Cpu {
             }
             0xd0 => {
                 if !self.get_flag(Flag::C) {
-                    self.PC = self.pop_sp(mem);
+                    self.ret(mem);
                     return Instruction::Ok(opcode, 1, 20, "RET NC");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET NC")
@@ -941,13 +941,13 @@ impl Cpu {
             }
             0xd8 => {
                 if self.get_flag(Flag::C) {
-                    self.PC = self.pop_sp(mem);
+                    self.ret(mem);
                     return Instruction::Ok(opcode, 1, 20, "RET C");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET C")
             }
             0xd9 => {
-                self.PC = self.pop_sp(mem);
+                self.ret(mem);
                 self.IME = true;
                 Instruction::Ok(opcode, 1, 16, "RETI")
             }
