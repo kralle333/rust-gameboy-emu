@@ -37,8 +37,8 @@ mod tests {
                 vec![0; 32768],
                 &Cartridge {
                     cartidge_type: crate::cartridge::CartridgeType::RomOnly,
-                    rom_bank_size: 32768,
-                    ram_bank_size: 0,
+                    rom_size: 32768,
+                    ram_size: 0,
                 },
             );
             t

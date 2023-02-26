@@ -49,7 +49,7 @@ pub fn main() {
         (video::SCREEN_HEIGHT * video::PIXEL_SIZE) as u32,
     );
 
-    let mut debug_canvas = sdl.get_window_canvas("tiles", 384*2, 500);
+    let mut debug_canvas = sdl.get_window_canvas("tiles", 384 * 2, 500);
 
     debug_canvas.clear();
     debug_canvas.present();
@@ -70,6 +70,7 @@ pub fn main() {
         if emulator.draw(&mut canvas) {
             canvas.present();
         }
+
         debug_canvas.set_draw_color(Color::BLACK);
         debug_canvas.clear();
         if emulator.draw_debug(&mut debug_canvas) {

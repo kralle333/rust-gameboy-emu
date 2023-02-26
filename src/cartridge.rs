@@ -21,20 +21,20 @@ impl CartridgeType {
 
 pub struct Cartridge {
     pub cartidge_type: CartridgeType,
-    pub rom_bank_size: usize,
-    pub ram_bank_size: usize,
+    pub rom_size: usize,
+    pub ram_size: usize,
 }
 
 impl Cartridge {
     pub fn new(data: &Vec<u8>) -> Self {
         let mut cartridge = Cartridge {
             cartidge_type: CartridgeType::Invalid,
-            rom_bank_size: 0,
-            ram_bank_size: 0,
+            rom_size: 0,
+            ram_size: 0,
         };
         cartridge.cartidge_type = CartridgeType::from_u32(data[0x147] as u32);
 
-        cartridge.rom_bank_size = match data[0x148] {
+        cartridge.rom_size = match data[0x148] {
             0 => 32 * KB,
             1 => 64 * KB,
             2 => 128 * KB,
@@ -47,7 +47,7 @@ impl Cartridge {
                 data.len()
             }
         };
-        cartridge.ram_bank_size = match data[0x149] {
+        cartridge.ram_size = match data[0x149] {
             0 => 2 * KB,
             1 => 2 * KB,
             2 => 8 * KB,

@@ -71,8 +71,8 @@ impl Emulator {
         let cartridge = Cartridge::new(&result);
         println!(
             "Success: Rom Size {0}KB Ram {1}KB, Catridge {2:?}",
-            cartridge.rom_bank_size / 1024,
-            cartridge.ram_bank_size / 1024,
+            cartridge.rom_size / 1024,
+            cartridge.ram_size / 1024,
             cartridge.cartidge_type
         );
 

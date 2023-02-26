@@ -41,13 +41,13 @@ impl MemoryType for Rom {
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x7fff => match self.mbc_mode {
-                MbcMode::None => {},
+                MbcMode::None => {}
                 MbcMode::Mbc1_16mbRom8kbRam | MbcMode::Mbc1_4mbRom32kbRam => {
                     self.write_mbc1(addr, val);
                 }
                 MbcMode::Invalid => todo!(),
             },
-            0xa000..=0xbfff => self.external_ram[addr as usize & 0x1fff] = val,
+            0xa000..=0xbfff => self.external_ram[(addr & 0x1fff) as usize + self.ram_offset] = val,
             0xc000..=0xdfff => self.internal_ram[addr as usize & 0x1fff] = val,
             0xe000..=0xfdff => self.internal_ram[(addr as usize - 0x2000) & 0x1fff] = val, // echo
             0xff00..=0xfffe => self.high_ram[addr as usize & 0x7f] = val,
@@ -106,7 +106,7 @@ impl Rom {
     }
 
     pub fn load(&mut self, data: &[u8], cartridge_info: &Cartridge) {
-        self.rom = vec![0; cartridge_info.rom_bank_size];
+        self.rom = vec![0; cartridge_info.rom_size];
         self.rom.copy_from_slice(&data);
 
         match cartridge_info.cartidge_type {
@@ -115,6 +115,6 @@ impl Rom {
             CartridgeType::Mbc2 => todo!(),
             CartridgeType::Invalid => todo!(),
         }
-        self.external_ram = vec![0; cartridge_info.ram_bank_size];
+        self.external_ram = vec![0; cartridge_info.ram_size];
     }
 }
