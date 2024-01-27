@@ -83,7 +83,10 @@ impl Cpu {
     }
 
     pub fn tick(&mut self, mem: &mut memory::Memory) {
-        self.fetch_decode(mem)
+        self.fetch_decode(mem);
+        if self.PC == 0x0100 && mem.in_bios() {
+            mem.set_out_of_bios();
+        }
     }
 
     pub fn print(&self) {

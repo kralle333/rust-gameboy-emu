@@ -12,7 +12,7 @@ enum MbcMode {
 
 pub struct Rom {
     rom: Vec<u8>,
-    external_ram: Vec<u8>,
+    external_ram: [u8; 0x2000],
     internal_ram: [u8; 0x2000],
     high_ram: [u8; 0x7f],
 
@@ -60,10 +60,10 @@ impl Rom {
     pub fn new() -> Self {
         Self {
             rom: Vec::new(),
-            external_ram: Vec::new(),
             rom_offset: 0x4000,
             ram_offset: 0,
             internal_ram: [0; 0x2000],
+            external_ram: [0;0x2000],
             high_ram: [0; 0x7f],
             mbc_mode: MbcMode::Invalid,
             ram_enabled: false,
@@ -91,7 +91,7 @@ impl Rom {
                 if self.mbc_mode == MbcMode::Mbc1_4mbRom32kbRam {
                     let ram_bank = val & 0x3;
                     self.ram_offset = ram_bank as usize * 0x2000;
-                    println!("switced to ram bank {ram_bank}");
+                    println!("switched to ram bank {ram_bank}");
                 }
             }
             0x6000..=0x7fff => {
@@ -115,6 +115,5 @@ impl Rom {
             CartridgeType::Mbc2 => todo!(),
             CartridgeType::Invalid => todo!(),
         }
-        self.external_ram = vec![0; cartridge_info.ram_size];
     }
 }

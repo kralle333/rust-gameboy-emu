@@ -17,7 +17,7 @@ impl SdlWrapper {
             context: sdl_context,
             video: video_subsystem,
             audio: audio_subsystem,
-            event_pump: event_pump,
+            event_pump,
         }
     }
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use sdl2::{rect::Rect, render::Canvas, video::Window};
 
 use super::MemoryType;
@@ -10,6 +11,7 @@ pub enum TickMode {
     OAM = 0b10,
     OAMVRAM = 0b11,
 }
+
 
 impl TickMode {
     fn from_val(val: u8) -> TickMode {
@@ -60,6 +62,7 @@ enum PaletteType {
     Object0,
     Object1,
 }
+
 pub struct Gpu {
     vram: [u8; 0x2000],
     objects: [ObjData; 40],
@@ -68,21 +71,36 @@ pub struct Gpu {
     clock: u32,
     can_draw: bool,
     //Video registers
-    lcdc: u8,                         //FF40
-    lcdc_stat: u8,                    //FF41
-    scroll_x: u8,                     //FF42
-    scroll_y: u8,                     //FF43
-    vert_line: u8,                    //FF44
-    vert_line_cp: u8,                 //FF45
-    dma_write_addr: u8,               //FF46
-    window_y: u8,                     //FF4A
-    window_x: u8,                     //FF4B
-    bg_palette: u8,                   //FF47,
-    obj_palette0: u8,                 //FF48
-    obj_palette1: u8,                 //FF49
-    background_palette: [GBColor; 4], //FF47
-    object_palette0: [GBColor; 4],    //FF48
-    object_palette1: [GBColor; 4],    //FF49
+    lcdc: u8,
+    //FF40
+    lcdc_stat: u8,
+    //FF41
+    scroll_x: u8,
+    //FF42
+    scroll_y: u8,
+    //FF43
+    vert_line: u8,
+    //FF44
+    vert_line_cp: u8,
+    //FF45
+    dma_write_addr: u8,
+    //FF46
+    window_y: u8,
+    //FF4A
+    window_x: u8,
+    //FF4B
+    bg_palette: u8,
+    //FF47,
+    obj_palette0: u8,
+    //FF48
+    obj_palette1: u8,
+    //FF49
+    background_palette: [GBColor; 4],
+    //FF47
+    object_palette0: [GBColor; 4],
+    //FF48
+    object_palette1: [GBColor; 4],
+    //FF49
     pixels: [GBColor; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
 }
 
@@ -181,6 +199,35 @@ impl Gpu {
             object_palette1: [GBColor::White; 4],
             clock: 0,
         }
+    }
+
+    pub(crate) fn bg_and_window_display_set(&self) -> bool {
+        return (self.lcdc & 0x01) == 0x01;
+    }
+    pub(crate) fn OBJ_sprite_display_set(&self) -> bool {
+        return (self.lcdc & 0x02) == 0x02;
+    }
+
+    pub(crate) fn OBJ_sprite_size_set(&self) -> bool {
+        return (self.lcdc & 0x04) == 0x04;
+    }
+
+    pub(crate) fn bg_tile_map_display_select_set(&self) -> bool {
+        return (self.lcdc & 0x08) == 0x08;
+    }
+
+    pub(crate) fn bg_and_window_tile_data_select_set(&self) -> bool {
+        return (self.lcdc & 0x10) == 0x10;
+    }
+    pub(crate) fn window_display_set(&self) -> bool {
+        return (self.lcdc & 0x20) == 0x20;
+    }
+    pub(crate) fn window_tile_map_display_select_set(&self) -> bool {
+        return (self.lcdc & 0x40) == 0x40;
+    }
+
+    pub(crate) fn lcd_control_operation_set(&self) -> bool {
+        return (self.lcdc & 0x80) == 0x80;
     }
 
     pub(crate) fn get_pixel(&self, x: usize, y: usize) -> GBColor {
@@ -335,14 +382,18 @@ impl Gpu {
     }
 
     pub fn render_screen(&mut self) {
+        self.render_bg();
+        self.render_objects();
+    }
+    fn render_bg(&mut self) {
         //Display BG and window?
-        if self.lcdc & 1 != 1 {
+        if !self.bg_and_window_display_set() {
             return;
         }
 
         // VRAM offset for the tile map
         let mut map_offs: u16 = 0x1800;
-        if self.lcdc & 0x8 == 0x8 {
+        if self.bg_tile_map_display_select_set() {
             map_offs = 0x1C00
         }
 
@@ -365,8 +416,7 @@ impl Gpu {
 
         // If the tile data set in use is #1, the
         // indices are signed; calculate a real tile offset
-        let lcdl_4_set = (self.lcdc & 0x10) == 0x10;
-        if !lcdl_4_set && tile < 128 {
+        if self.bg_and_window_tile_data_select_set() && tile < 128 {
             tile += 256;
         }
         for _ in 0..SCREEN_WIDTH {
@@ -384,8 +434,52 @@ impl Gpu {
                 x = 0;
                 line_offset = (line_offset + 1) & 31;
                 tile = self.vram[(map_offs + line_offset) as usize] as u16;
-                if !lcdl_4_set && tile < 128 {
+                if !self.bg_and_window_tile_data_select_set() && tile < 128 {
                     tile += 256;
+                }
+            }
+        }
+    }
+
+    fn render_objects(&mut self) {
+        if self.OBJ_sprite_display_set() {
+            return;
+        }
+
+        let use_8x16 = self.OBJ_sprite_size_set();
+        let mut objects_drawn = HashMap::new();
+        for obj in self.objects.iter().rev() {
+            if obj.x == 0 && obj.y == 0 {
+                continue;
+            }
+            let screen_x = (obj.x as i32 - 8);
+            let screen_y = (obj.y as i32 - 16);
+
+            for y in 0..(if use_8x16 { 16 } else { 8 }) {
+                let mut drawn_any = false;
+                let entry_key = screen_y + y;
+                let entry = objects_drawn.entry(entry_key.clone()).or_insert(0);
+                if entry > &mut 10 {
+                    continue;
+                }
+                for x in 0..8 {
+                    if (screen_x + x) < 0 || (screen_y + y) < 0 {
+                        continue;
+                    }
+                    drawn_any = true;
+                    let palette = match obj.pal_num {
+                        false => self.object_palette0,
+                        true => self.object_palette1
+                    };
+                    let sprite_x = (if obj.x_flip { 7 - x } else { x }) as usize;
+                    let sprite_y = (if obj.y_flip { 7 - y } else { y }) as usize;
+                    let pal_color = palette[self.bg_tiles[obj.pattern_num as usize][sprite_y][sprite_x] as usize];
+
+                    self.pixels[(screen_x + x) as usize + (screen_y + y) as usize * SCREEN_WIDTH] = pal_color;
+                }
+
+                if drawn_any {
+                    *entry += 1;
                 }
             }
         }
