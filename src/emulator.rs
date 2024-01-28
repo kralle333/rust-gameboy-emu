@@ -2,12 +2,14 @@ use std::fs;
 
 use sdl2::rect::{Rect};
 use sdl2::render::Canvas;
+use sdl2::sys::Font;
+use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::Window;
 
 use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
-use crate::memory::Memory;
+use crate::memory::{Memory, MemoryType};
 use crate::video;
 
 #[derive(PartialEq)]
@@ -70,7 +72,7 @@ impl Emulator {
         let result = fs::read(file_path).expect("file not found");
         let cartridge = Cartridge::new(&result);
         println!(
-            "Success: Rom Size {0}KB Ram {1}KB, Catridge {2:?}",
+            "Success: Rom Size {0}KB Ram {1}KB, Cartridge {2:?}",
             cartridge.rom_size / 1024,
             cartridge.ram_size / 1024,
             cartridge.cartidge_type

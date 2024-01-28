@@ -34,6 +34,7 @@ pub struct Cpu {
     clock_m: u8,
     clock_t: u32,
 
+    triggered_interruption: String,
     last_instruction: Instruction,
     last_regs: String,
 }
@@ -80,10 +81,11 @@ impl Cpu {
         self.EI = false;
         self.last_instruction = Instruction::None;
         self.last_regs = "".to_string();
+        self.triggered_interruption = "".to_string();
     }
 
     pub fn tick(&mut self, mem: &mut memory::Memory) {
-        if self.PC == 0x0100  {
+        if self.PC == 0x0100 {
             mem.set_out_of_bios();
         }
         self.fetch_decode(mem);
@@ -103,6 +105,9 @@ impl Cpu {
             Instruction::Invalid(opcode) => {
                 println!("invalid opcode! {opcode:#06x}");
             }
+        }
+        if !self.triggered_interruption.is_empty() {
+            println!("Interrupt triggered: {}", self.triggered_interruption);
         }
     }
 
@@ -235,14 +240,15 @@ impl Cpu {
                 self.set_clocks(0, clocks);
                 self.PC = self.PC.wrapping_add(length);
             }
-            Instruction::Invalid(opcode) => println!("invalid upcode {opcode}"),
+            Instruction::Invalid(opcode) => println!("invalid opcode {opcode}"),
         }
         self.check_interrupt_status(mem, opcode);
     }
 
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {
-        //Go through the five different interrupts and see if any is triggered
+        self.triggered_interruption = "".to_string();
 
+        //Go through the four different interrupts and see if any is triggered
         if self.DI && last_opcode & 0xf3 != last_opcode {
             self.DI = false;
             self.IME = false;
@@ -256,11 +262,9 @@ impl Cpu {
         }
 
         let enabled_interrupts = mem.read_byte(0xFFFF);
-        let interupt_flag = mem.read_byte(0xFF0F);
-        //println!("Enabled interrupts 0b{enabled_interrupts:b}");
-        //println!("Interrupts triggered  0b{interupt_flag:b}");
+        let interrupt_flag = mem.read_byte(0xFF0F);
 
-        let to_fire = enabled_interrupts & interupt_flag;
+        let to_fire = enabled_interrupts & interrupt_flag;
 
         for i in 0..=4 {
             let interrupt = to_fire & (1 << i);
@@ -284,8 +288,8 @@ impl Cpu {
                 4 => "Transition High->Low on pins P10-P13",
                 _ => panic!("unknown flag")
             };
-            println!("Triggering interrupt {}",interrupt_name);
-            mem.write_byte(0xFF0F, interupt_flag&!(1 << i));
+            self.triggered_interruption = interrupt_name.to_string();
+            mem.write_byte(0xFF0F, interrupt_flag & !(1 << i));
             self.rst(mem, restart_address);
             return;
         }
