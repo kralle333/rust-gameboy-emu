@@ -2,14 +2,12 @@ use std::fs;
 
 use sdl2::rect::{Rect};
 use sdl2::render::Canvas;
-use sdl2::sys::Font;
-use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::Window;
 
 use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
-use crate::memory::{Memory, MemoryType};
+use crate::memory::{Memory};
 use crate::video;
 
 #[derive(PartialEq)]
