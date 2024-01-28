@@ -127,8 +127,8 @@ mod tests {
             Register::H,
             Register::L,
         ]
-        .iter()
-        .copied();
+            .iter()
+            .copied();
         registers
     }
 
@@ -176,6 +176,7 @@ mod tests {
             }
         }
     }
+
     #[test]
     fn test_bits() {
         let mut c = cpu::Cpu::new();
@@ -384,25 +385,47 @@ mod tests {
         t.run_with_a16(0xc3, 0x0108);
         assert_eq!(t.cpu.PC, 0x108);
     }
+
     #[test]
     fn test_jp_addr_h16() {
         //0xc3 JP ad8
         let mut t = Tester::new();
         t.cpu.HL = 0xD002;
-        t.mem.write_word(0xD002,0x108);
+        t.mem.write_word(0xD002, 0x108);
         t.run(0xe9);
         assert_eq!(t.cpu.PC, 0x108);
     }
+
+    #[test]
+    fn test_ld_hl_sp_plus_r8() {
+        let mut t = Tester::new();
+        t.run(0xf8);
+    }
+
     #[test]
     fn test_push_pop_stack() {
         let mut t = Tester::new();
-        t.mem.write_word(t.cpu.SP, 0);
+        for _ in 0..10 {
+            t.mem.write_word(t.cpu.SP, 0);
 
-        t.cpu.push_sp(&mut t.mem, 0x1234);
-        let v = t.cpu.pop_sp(&t.mem);
-
-        assert_eq!(v, 0x1234);
+            t.cpu.push_sp(&mut t.mem, 0x1234);
+            let v = t.cpu.pop_sp(&t.mem);
+            assert_eq!(v, 0x1234);
+        }
     }
+
+    #[test]
+    fn test_rst_reti() {
+        let mut t = Tester::new();
+
+        // "RST 3"
+        t.run(0xdf);
+        assert_eq!(t.cpu.PC(),0x18);
+
+        t.run(0xd9);
+        assert_eq!(t.cpu.PC(),0xc000);
+    }
+
     #[test]
     fn test_hl_plus_minus() {
         let mut t = Tester::new();

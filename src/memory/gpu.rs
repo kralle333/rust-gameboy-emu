@@ -156,7 +156,6 @@ impl MemoryType for Gpu {
                 }
                 0x45 => {
                     self.vert_line_cp = val;
-                    println!("LYC: ${val:X}")
                 }
                 0x46 => self.dma_write_addr = val,
                 0x47 => {
@@ -398,8 +397,8 @@ impl Gpu {
 
     pub fn render_screen(&mut self) {
         self.render_bg();
-        self.ren();
-        //self.render_objects();
+        self.render_window();
+        self.render_objects();
     }
     fn render_bg(&mut self) {
         if !self.should_display_background() {
@@ -455,7 +454,7 @@ impl Gpu {
             }
         }
     }
-    fn ren(&mut self) {
+    fn render_win dow(&mut self) {
         if !self.should_draw_window() {
             return;
         }
@@ -501,93 +500,32 @@ impl Gpu {
         }
     }
 
-    fn render_window(&mut self) {
-
-        // VRAM offset for the tile map
-        let mut map_offs: u16 = 0x1800;
-        if self.window_tile_table_address() {
-            map_offs = 0x1C00
-        }
-        if self.vert_line < self.window_y {
-            return;
-        }
-        if self.window_x < 7 || self.window_x > 166 {
-            return;
-        }
-
-        let screen_x = self.window_x - 7;
-        let screen_y = self.vert_line - self.window_y;
-        map_offs += (screen_y >> 3) as u16;
-
-        // Where to render on the canvas
-        let mut canvasoffs: u32 = (screen_x as usize + (self.vert_line as usize * SCREEN_WIDTH)) as u32;
-
-        // Which tile to start with in the map line
-        let mut line_offset: u16 = 0;
-
-        // Read tile index from the background map
-        let mut tile = self.vram[(map_offs + line_offset) as usize] as u16;
-
-        // If the tile data set in use is #1, the
-        // indices are signed; calculate a real tile offset
-        if self.tile_pattern_table_address() && tile < 128 {
-            tile += 256;
-        }
-
-        let mut tile_x = ((screen_x) & 7) as usize;
-        let tile_y = (screen_y & 7) as usize;
-
-        for _ in self.window_x..SCREEN_WIDTH as u8 {
-            // Re-map the tile pixel through the palette
-            let pal_color = self.background_palette[self.bg_tiles[tile as usize][tile_y][tile_x] as usize];
-
-            // Plot the pixel to canvas…
-            self.pixels[canvasoffs as usize] = pal_color;
-
-            canvasoffs += 1;
-
-            // When this tile ends, read another
-            tile_x += 1;
-            if tile_x == 8 {
-                tile_x = 0;
-                line_offset = (line_offset + 1) & 31; // tiles are 32x32
-                tile = self.vram[(map_offs + line_offset) as usize] as u16;
-                if !self.tile_pattern_table_address() && tile < 128 {
-                    tile += 256;
-                }
-            }
-        }
-    }
     fn render_objects(&mut self) {
         let use_8x16 = self.use_8x16_sprites();
-        let mut objects_drawn = HashMap::new();
+        let height = if use_8x16 { 16 } else { 8 };
+        let cur_line = self.vert_line as i32;
+        let mut draw_count = 0;
         for obj in self.objects.iter() {
             if obj.x == 0 && obj.y == 0 {
                 continue;
             }
             let screen_x = (obj.x as i32 - 8);
             let screen_y = (obj.y as i32 - 16);
-            let sprite_pattern = (if use_8x16 { obj.pattern_num & 0xFE } else { obj.pattern_num }) as usize;
-
-
-            for y in 0..(if use_8x16 { 16 } else { 8 }) {
-                let mut drawn_any = false;
-                let entry_key = screen_y + y;
-                let entry = objects_drawn.entry(entry_key.clone()).or_insert(0);
-                if entry >= &mut 10 {
-                    continue;
+            if cur_line >= screen_y  && cur_line < (screen_y + height) {
+                let mut sprite_pattern = (if use_8x16 { obj.pattern_num & 0xFE } else { obj.pattern_num }) as usize;
+                let mut y = cur_line-screen_y;
+                if y >= 8{
+                    sprite_pattern+=1;
+                    y-=8;
                 }
                 for x in 0..8 {
-                    if (screen_x + x) < 0 || (screen_y + y) < 0 {
-                        continue;
-                    }
-                    drawn_any = true;
+                    let sprite_x = (if obj.x_flip { 7 - x } else { x }) as usize;
+                    let sprite_y = (if obj.y_flip { 7 - y } else { y }) as usize;
+
                     let palette = match obj.pal_num {
                         false => self.object_palette0,
                         true => self.object_palette1
                     };
-                    let sprite_x = (if obj.x_flip { 7 - x } else { x }) as usize;
-                    let sprite_y = (if obj.y_flip { 7 - y } else { y }) as usize;
                     let pal_color = palette
                         [self.bg_tiles
                         [sprite_pattern][sprite_y][sprite_x] as usize];
@@ -600,10 +538,7 @@ impl Gpu {
                         self.pixels[pos] = pal_color;
                     }
                 }
-
-                if drawn_any {
-                    *entry += 1;
-                }
+                draw_count += 1;
             }
         }
     }

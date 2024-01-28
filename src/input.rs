@@ -17,6 +17,7 @@ pub enum Button {
     DumpBgTiles,
     Step,
     ToggleStepping,
+    Continue,
 }
 
 pub struct Input {
@@ -37,7 +38,8 @@ fn get_default_config() -> HashMap<Keycode, Button> {
 
     keys.insert(Keycode::R, Button::Reset);
     keys.insert(Keycode::D, Button::DumpBgTiles);
-    keys.insert(Keycode::F9, Button::Step);
+    keys.insert(Keycode::F8, Button::Step);
+    keys.insert(Keycode::F9, Button::Continue);
     keys.insert(Keycode::F2, Button::ToggleStepping);
 
     keys
@@ -60,6 +62,7 @@ impl Input {
         keys.insert(Button::Reset, false);
         keys.insert(Button::DumpBgTiles, false);
         keys.insert(Button::Step, false);
+        keys.insert(Button::Continue, false);
         keys.insert(Button::ToggleStepping, false);
 
         let mut i = Input {

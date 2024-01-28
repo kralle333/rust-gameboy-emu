@@ -2,7 +2,7 @@ use crate::cartridge::{Cartridge, CartridgeType};
 
 use super::MemoryType;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum MbcMode {
     None,
     Mbc1_16mbRom8kbRam,
@@ -95,11 +95,16 @@ impl Rom {
                 }
             }
             0x6000..=0x7fff => {
-                self.mbc_mode = if (val as u8 & 1) == 1 {
-                    MbcMode::Mbc1_16mbRom8kbRam
-                } else {
-                    MbcMode::Mbc1_4mbRom32kbRam
-                };
+                let new_mode =
+                    if (val & 1) == 0 {
+                        MbcMode::Mbc1_16mbRom8kbRam
+                    } else {
+                        MbcMode::Mbc1_4mbRom32kbRam
+                    };
+                if self.mbc_mode != new_mode {
+                    println!("switched mbc1 mode: {:?}", new_mode);
+                    self.mbc_mode = new_mode;
+                }
             }
             _ => panic!(),
         }

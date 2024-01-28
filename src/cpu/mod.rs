@@ -231,7 +231,7 @@ impl Cpu {
         let opcode = mem.read_byte(self.PC);
         self.last_regs = self.registers_str(&mem);
         self.last_instruction = match opcode {
-            0xcb => self.execute_cb(opcode, mem),
+            0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
             _ => self.execute(opcode, mem),
         };
         match self.last_instruction {
@@ -240,7 +240,7 @@ impl Cpu {
                 self.set_clocks(0, clocks);
                 self.PC = self.PC.wrapping_add(length);
             }
-            Instruction::Invalid(opcode) => println!("invalid opcode {opcode}"),
+            Instruction::Invalid(opcode) => println!("invalid opcode {}",Self::clean_hex_8(opcode)),
         }
         self.check_interrupt_status(mem, opcode);
     }
@@ -248,7 +248,7 @@ impl Cpu {
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {
         self.triggered_interruption = "".to_string();
 
-        //Go through the four different interrupts and see if any is triggered
+        //Go through the five different interrupts and see if any is triggered
         if self.DI && last_opcode & 0xf3 != last_opcode {
             self.DI = false;
             self.IME = false;

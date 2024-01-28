@@ -144,6 +144,10 @@ impl Emulator {
         if keys.is_new_down(&Button::Step) {
             self.step_one = true;
         }
+        if keys.is_new_down(&Button::Continue) && self.debug_mode == DebugMode::Stepping{
+            self.debug_mode = DebugMode::Breakpoint(self.config.breakpoint);
+            self.step_one = false;
+        }
         if keys.is_new_down(&Button::ToggleStepping) {
             self.debug_mode = if self.debug_mode == DebugMode::Stepping {
                 DebugMode::None

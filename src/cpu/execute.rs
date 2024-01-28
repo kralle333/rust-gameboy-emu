@@ -1011,7 +1011,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 2, 16, "ADD SP,r8")
             }
             0xe9 => {
-                self.PC = mem.read_word(self.HL);
+                self.PC = self.HL;
                 Instruction::Ok(opcode, 0, 16, "JP (HL)")
             }
             0xea => {

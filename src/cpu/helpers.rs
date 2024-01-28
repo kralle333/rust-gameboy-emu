@@ -158,7 +158,7 @@ impl Cpu {
     }
 
     pub fn rst(&mut self, mem: &mut Memory, addr: u16) {
-        self.push_sp(mem, self.PC);
+        self.push_sp(mem, self.PC-1);
         self.PC = addr;
         self.IME = false;
         self.HALT = false;
