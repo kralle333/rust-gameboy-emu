@@ -330,7 +330,7 @@ impl Gpu {
                 video::PIXEL_SIZE as u32,
             )) {
                 Ok(_) => {}
-                Err(err) => panic!("{err}"),
+                Err(_err) => panic!("{_err}"),
             }
         }
         return true;
@@ -341,7 +341,7 @@ impl Gpu {
         self.vert_line += 1;
         if self.vert_line == self.vert_line_cp {
             self.lcdc_stat |= 0x4; //LYC = LCDC LY
-            if (Self::is_bit_set(self.lcdc_stat, 6)) {
+            if Self::is_bit_set(self.lcdc_stat, 6) {
                 return true;
             }
         } else {
@@ -366,7 +366,7 @@ impl Gpu {
             }
             //HBlank
             TickMode::HBLANK if self.clock >= 204 => {
-                if (self.inc_vert_line()) {
+                if self.inc_vert_line() {
                     interrupts |= 0x2;
                 }
                 if self.vert_line >= 144 {
@@ -381,7 +381,7 @@ impl Gpu {
             }
             //VBlank
             TickMode::VBLANK if self.clock >= 114 => {
-                if (self.inc_vert_line()) {
+                if self.inc_vert_line() {
                     interrupts |= 0x2;
                 }
                 self.clock = 0;
@@ -424,7 +424,7 @@ impl Gpu {
         let mut x = (self.scroll_x & 7) as usize;
 
         // Where to render on the canvas
-        let mut canvasoffs: u32 = (self.vert_line as usize * video::SCREEN_WIDTH) as u32;
+        let mut canvasoffs: u32 = (self.vert_line as usize * SCREEN_WIDTH) as u32;
 
         // Read tile index from the background map
         let mut tile = self.vram[(map_offs + line_offset) as usize] as u16;
@@ -470,7 +470,7 @@ impl Gpu {
             return;
         }
         let screen_x = self.window_x - 7;
-        let window_offset = (self.vert_line - self.window_y);
+        let window_offset = self.vert_line - self.window_y;
 
         let mut canvasoffs = screen_x as usize + (self.vert_line as usize) * SCREEN_WIDTH;
 
@@ -485,7 +485,7 @@ impl Gpu {
 
             if self.use_zero_as_window_solid() ||
                 (pal_color != GBColor::White && !self.use_zero_as_window_solid()) {
-                self.pixels[canvasoffs as usize] = pal_color;
+                self.pixels[canvasoffs] = pal_color;
             }
 
             canvasoffs += 1;
@@ -493,7 +493,7 @@ impl Gpu {
             if tile_x == 8 {
                 tile_x = 0;
                 line_offset += 1;
-                tile = self.vram[(tilemap_addr_start as usize + line_offset as usize) as usize] as u16;
+                tile = self.vram[(tilemap_addr_start as usize + line_offset as usize)] as u16;
                 if !self.tile_pattern_table_address() && tile < 128 {
                     tile += 256;
                 }
@@ -515,12 +515,12 @@ impl Gpu {
             return;
         }
 
-        let screen_x = (self.window_x - 7);
-        let screen_y = ((self.vert_line - self.window_y));
+        let screen_x = self.window_x - 7;
+        let screen_y = self.vert_line - self.window_y;
         map_offs += (screen_y >> 3) as u16;
 
         // Where to render on the canvas
-        let mut canvasoffs: u32 = ((screen_x as usize + (self.vert_line as usize * SCREEN_WIDTH))) as u32;
+        let mut canvasoffs: u32 = (screen_x as usize + (self.vert_line as usize * SCREEN_WIDTH)) as u32;
 
         // Which tile to start with in the map line
         let mut line_offset: u16 = 0;
@@ -535,7 +535,7 @@ impl Gpu {
         }
 
         let mut tile_x = ((screen_x) & 7) as usize;
-        let tile_y = ((screen_y & 7) as usize);
+        let tile_y = (screen_y & 7) as usize;
 
         for _ in self.window_x..SCREEN_WIDTH as u8 {
             // Re-map the tile pixel through the palette
