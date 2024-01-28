@@ -72,7 +72,7 @@ impl MemoryType for Memory {
         match addr {
             0x0000..=0x00ff => {
                 if self.in_bios {
-                    return self.bios[addr as usize]
+                    return self.bios[addr as usize];
                 }
                 self.rom.read_byte(addr)
             }
@@ -113,7 +113,7 @@ impl MemoryType for Memory {
             0x8000..=0x9fff => self.gpu.write_byte(addr, val),
             0xa000..=0xfdff => self.rom.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
-            0xfea0..=0xfeff => println!("Writing to empty but unusable for I/O"),
+            0xfea0..=0xfeff => {}
             0xff00 => self.joypad = val,
             0xff01 => self.serial_transfer_data = val,
             0xff02 => self.serial_transer_control = val,
@@ -124,7 +124,7 @@ impl MemoryType for Memory {
             0xff0f => self.interupt_flag = val,
             0xff10..=0xff3f => self.snd.write_byte(addr, val),
             0xff40..=0xff4b => self.gpu.write_byte(addr, val),
-            0xff4c..=0xff7f => println!("Writing to empty but unusable for I/O"),
+            0xff4c..=0xff7f => {}
             0xff80..=0xfffe => self.rom.write_byte(addr, val),
             0xffff => self.interupt_enable = val,
             _ => println!("unused {}", addr),
@@ -221,6 +221,7 @@ impl Memory {
         self.update_special_registers();
         let interrupts = self.gpu.tick(clock_t);
         if interrupts > 0 {
+            //println!("Setting interrupts: {interrupts}");
             self.interupt_flag |= interrupts;
         }
     }

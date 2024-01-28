@@ -42,6 +42,11 @@ pub fn main() {
     let mut emulator = emulator::Emulator::new(config);
     emulator.load_rom(&rom_path.to_string());
 
+    let mut debug_canvas = sdl.get_window_canvas("tiles", 384 * 2, 500);
+
+    debug_canvas.clear();
+    debug_canvas.present();
+
     let mut input = input::Input::new();
     let mut canvas = sdl.get_window_canvas(
         "Gameboy Emulator",
@@ -49,10 +54,6 @@ pub fn main() {
         (video::SCREEN_HEIGHT * video::PIXEL_SIZE) as u32,
     );
 
-    let mut debug_canvas = sdl.get_window_canvas("tiles", 384 * 2, 500);
-
-    debug_canvas.clear();
-    debug_canvas.present();
 
     'running: loop {
         input.set_prev_keys();
@@ -76,6 +77,6 @@ pub fn main() {
         if emulator.draw_debug(&mut debug_canvas) {
             debug_canvas.present();
         }
-        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 1000));
+        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 100000));
     }
 }

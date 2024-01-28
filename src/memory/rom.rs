@@ -32,7 +32,7 @@ impl MemoryType for Rom {
             0x4000..=0x7fff => self.rom[(addr & 0x3fff) + self.rom_offset as usize],
             0xa000..=0xbfff => self.external_ram[(addr & 0x1fff) + self.ram_offset],
             0xc000..=0xdfff => self.internal_ram[addr & 0x1fff],
-            0xe000..=0xfdff => self.internal_ram[(addr - 0x2000) & 0x1fff], // echo
+            0xe000..=0xfeff => { self.internal_ram[(addr - 0x2000) & 0x1fff] } // echo
             0xff00..=0xfffe => self.high_ram[addr & 0x7f],
             _ => panic!("fail"),
         }
@@ -63,7 +63,7 @@ impl Rom {
             rom_offset: 0x4000,
             ram_offset: 0,
             internal_ram: [0; 0x2000],
-            external_ram: [0;0x2000],
+            external_ram: [0; 0x2000],
             high_ram: [0; 0x7f],
             mbc_mode: MbcMode::Invalid,
             ram_enabled: false,

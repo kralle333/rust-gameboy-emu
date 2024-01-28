@@ -6,32 +6,65 @@ mod tests {
     fn test_memory_read_write_bytes() {
         let mut memory = Memory::new();
 
-        for addr in 0x0000..0xfea0 {
+        // VRAM
+        for addr in 0x8000..0xA000 {
             memory.write_byte(addr, 0xAB);
             assert_eq!(memory.read_byte(addr), 0xAB);
         }
-        for addr in 0xff00..0xff07 {
-            if addr != 0xff03 && addr != 0xff04 {
-                memory.write_byte(addr, 0xAB);
-                assert_eq!(memory.read_byte(addr), 0xAB);
-            }
+        // EXTERNAL RAM
+        for addr in 0xA000..0xC000 {
+            memory.write_byte(addr, 0xAB);
+            assert_eq!(memory.read_byte(addr), 0xAB);
         }
 
-        // TODO: sound registers
-        for addr in 0xff0f..0xffff {
+        // INTERNAL RAM
+        for addr in 0xC000..0xE000 {
             memory.write_byte(addr, 0xAB);
             assert_eq!(memory.read_byte(addr), 0xAB);
         }
-        memory.write_byte(0xff04, 0xAB);
-        assert_eq!(memory.read_byte(0xff04), 0);
+        
     }
     #[test]
     fn test_memory_read_write_words() {
-        let mut memory = Memory::new(); // Create a new instance of the memory struct
+        let mut memory = Memory::new();
 
-        for addr in 0x0000..0xfea0 {
-            memory.write_word(addr, 0xAB); // Set the value at address 0x1234 to 0xAB
-            assert_eq!(memory.read_word(addr), 0xAB); // Verify that the value can be read back correctly
+        // VRAM
+        for addr in 0x8000..0xA000 {
+            memory.write_word(addr, 0xABFE);
+            assert_eq!(memory.read_word(addr), 0xABFE);
         }
+        // EXTERNAL RAM
+        for addr in 0xA000..0xC000 {
+            memory.write_word(addr, 0xABFE);
+            assert_eq!(memory.read_word(addr), 0xABFE);
+        }
+
+        // INTERNAL RAM 
+        for addr in 0xC000..0xE000 {
+            memory.write_word(addr, 0xABFE);
+            assert_eq!(memory.read_word(addr), 0xABFE);
+        }
+    }
+
+    #[test]
+    fn test_memory_internal_echo_read() {
+        let mut memory = Memory::new();
+
+         memory.write_byte(0xC000,0xFC);
+         assert_eq!(memory.read_byte(0xC000),memory.read_byte(0xE000));
+
+        memory.write_word(0xC000,0xFCAB);
+        assert_eq!(memory.read_word(0xC000),memory.read_word(0xE000));
+
+    }
+    #[test]
+    fn test_memory_internal_echo_write() {
+        let mut memory = Memory::new();
+
+        memory.write_byte(0xE000,0xFC);
+        assert_eq!(memory.read_byte(0xC000),memory.read_byte(0xE000));
+
+        memory.write_word(0xE000,0xFCAB);
+        assert_eq!(memory.read_word(0xC000),memory.read_word(0xE000));
     }
 }

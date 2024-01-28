@@ -83,10 +83,10 @@ impl Cpu {
     }
 
     pub fn tick(&mut self, mem: &mut memory::Memory) {
-        self.fetch_decode(mem);
-        if self.PC == 0x0100 && mem.in_bios() {
+        if self.PC == 0x0100  {
             mem.set_out_of_bios();
         }
+        self.fetch_decode(mem);
     }
 
     pub fn print(&self) {
@@ -257,12 +257,14 @@ impl Cpu {
 
         let enabled_interrupts = mem.read_byte(0xFFFF);
         let interupt_flag = mem.read_byte(0xFF0F);
+        //println!("Enabled interrupts 0b{enabled_interrupts:b}");
+        //println!("Interrupts triggered  0b{interupt_flag:b}");
 
         let to_fire = enabled_interrupts & interupt_flag;
 
         for i in 0..=4 {
-            let interupt = to_fire & (1 << i);
-            if interupt == 0 {
+            let interrupt = to_fire & (1 << i);
+            if interrupt == 0 {
                 continue;
             }
             let restart_address: u16;
@@ -274,8 +276,18 @@ impl Cpu {
                 4 => restart_address = 0x60,
                 _ => panic!("unknown flag"),
             }
-            println!("Firing interrupt {restart_address}");
+            let interrupt_name = match i {
+                0 => "LCD vertical blanking impulse",
+                1 => "LY=LYC",
+                2 => "Timer overflow",
+                3 => "End of serial I/O transfer",
+                4 => "Transition High->Low on pins P10-P13",
+                _ => panic!("unknown flag")
+            };
+            println!("Triggering interrupt {}",interrupt_name);
+            mem.write_byte(0xFF0F, interupt_flag&!(1 << i));
             self.rst(mem, restart_address);
+            return;
         }
     }
 
