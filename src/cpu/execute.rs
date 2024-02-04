@@ -1007,8 +1007,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 0, 16, "RST 5")
             }
             0xe8 => {
-                self.SP = self.add_16(self.SP, self.get_n(mem) as u16);
-                self.set_flag(Flag::Z, false);
+                self.add_sp_16_signed(self.get_n(mem));
                 Instruction::Ok(opcode, 2, 16, "ADD SP,r8")
             }
             0xe9 => {
@@ -1062,9 +1061,10 @@ impl Cpu {
                 Instruction::Ok(opcode, 0, 16, "RST 6")
             }
             0xf8 => {
-                let r8 = self.get_n(mem) as u16;
-                self.HL = self.add_16(self.SP, r8);
-                self.set_flag(Flag::Z, false);
+                let prev_sp = self.SP;
+                self.add_sp_16_signed(self.get_n(mem));
+                self.HL = self.SP;
+                self.SP = prev_sp;
                 Instruction::Ok(opcode, 2, 12, "LD HL,SP+r8")
             }
             0xf9 => {

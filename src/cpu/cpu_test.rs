@@ -43,6 +43,12 @@ mod tests {
             );
             t
         }
+        fn run_with_a8(&mut self, opcode: u8, u8: u8) {
+            self.mem.write_byte(0xc000, opcode); // 0xc000 = internal_ram
+            self.mem.write_byte(0xc001, u8);
+            self.cpu.PC = 0xc000;
+            self.cpu.fetch_decode(&mut self.mem);
+        }
         fn run_with_a16(&mut self, opcode: u8, a16: u16) {
             self.mem.write_byte(0xc000, opcode); // 0xc000 = internal_ram
             self.mem.write_word(0xc001, a16);
@@ -147,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn test_half_carry() {
+    fn test_half_carry_cp() {
         let mut t = Tester::new();
 
         t.cpu.AF = 0;
@@ -167,8 +173,54 @@ mod tests {
         t.assert_eq_flag(Flag::N, false);
         t.assert_eq_flag(Flag::H, true);
         t.assert_eq_flag(Flag::C, false);
-
     }
+    #[test]
+    fn test_half_carry_inc() {
+        let mut t = Tester::new();
+        t.cpu.AF = 0;
+        t.cpu.set_a(0b000_1111);
+        t.cpu.inc_register(Register::A);
+        t.assert_eq_flag(Flag::Z, false);
+        t.assert_eq_flag(Flag::N, false);
+        t.assert_eq_flag(Flag::H, true);
+        t.assert_eq_flag(Flag::C, false);
+    }
+
+    #[test]
+    fn test_half_carry_16_add() {
+        let mut t = Tester::new();
+        t.cpu.AF = 0;
+        t.cpu.add_16(0x0900,0x0900);
+        t.assert_eq_flag(Flag::Z, false);
+        t.assert_eq_flag(Flag::N, false);
+        t.assert_eq_flag(Flag::H, true);
+        t.assert_eq_flag(Flag::C, false);
+    }
+
+    #[test]
+    fn test_add_negative(){
+        let mut t = Tester::new();
+        let result = t.cpu.add_16(152, -10i16 as u16);
+        assert_eq!(result,142);
+    }
+
+    #[test]
+    fn test_add_signed_to_sp(){
+        let mut t = Tester::new();
+        let result = t.cpu.SP = 153;
+        t.run_with_a8(0xe8,(-50i8) as u8);
+        assert_eq!(t.cpu.SP,103);
+    }
+    #[test]
+    fn test_add_signed_to_sp_set_to_hl(){
+        let mut t = Tester::new();
+        let result = t.cpu.SP = 153;
+        t.run_with_a8(0xf8,(-50i8) as u8);
+        assert_eq!(t.cpu.HL,103);
+        assert_eq!(t.cpu.SP,153);
+    }
+
+
 
     #[test]
     fn test_set_get() {

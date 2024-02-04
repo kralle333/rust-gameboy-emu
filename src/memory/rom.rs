@@ -23,6 +23,9 @@ pub struct Rom {
     //Info
     mbc_mode: MbcMode,
     ram_enabled: bool,
+
+    //Debug
+    log_bank_changes: bool,
 }
 
 impl MemoryType for Rom {
@@ -68,6 +71,7 @@ impl Rom {
             high_ram: [0; 0x7f],
             mbc_mode: MbcMode::Invalid,
             ram_enabled: false,
+            log_bank_changes:false,
         }
     }
     fn write_mbc1(&mut self, addr: u16, val: u8) {
@@ -88,14 +92,18 @@ impl Rom {
                 };
                 if self.rom_offset != new_offset {
                     self.rom_offset = new_offset;
-                    println!("switched to rom bank {rom_bank}");
+                    if self.log_bank_changes {
+                        println!("switched to rom bank {rom_bank}");
+                    }
                 }
             }
             0x4000..=0x5fff => {
                 if self.mbc_mode == MbcMode::Mbc1_4mbRom32kbRam {
                     let ram_bank = val & 0x3;
                     self.ram_offset = ram_bank as usize * 0x2000;
-                    println!("switched to ram bank {ram_bank}");
+                    if self.log_bank_changes {
+                        println!("switched to ram bank {ram_bank}");
+                    }
                 }
             }
             0x6000..=0x7fff => {
@@ -106,7 +114,9 @@ impl Rom {
                         MbcMode::Mbc1_4mbRom32kbRam
                     };
                 if self.mbc_mode != new_mode {
-                    //println!("switched mbc1 mode: {:?}", new_mode);
+                    if self.log_bank_changes {
+                        //println!("switched mbc1 mode: {:?}", new_mode);
+                    }
                     self.mbc_mode = new_mode;
                 }
             }

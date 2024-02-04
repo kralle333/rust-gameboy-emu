@@ -50,6 +50,20 @@ impl Cpu {
         self.sub_a(b + self.get_flag(Flag::C) as u8);
     }
 
+    pub fn add_sp_16_signed(&mut self, val:u8){
+
+        let sp_as_signed = self.SP as i32;
+        let n_as_signed =  val as i8;
+        let n_as_signed_i32 = n_as_signed as i32;
+        let result = sp_as_signed.wrapping_add(n_as_signed_i32);
+
+        self.set_flag(Flag::Z, false);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, (sp_as_signed ^ n_as_signed_i32 ^ result) & 0x10 == 0x10);
+        self.set_flag(Flag::C, (sp_as_signed ^ n_as_signed_i32 ^ result) & 0x100 == 0x100);
+        self.SP = result as u16;
+    }
+
     pub fn add_16(&mut self, reg: u16, val: u16) -> u16 {
         let (result, overflow) = Self::overflow_add_16(reg, val);
         self.set_flag(Flag::N, false);
