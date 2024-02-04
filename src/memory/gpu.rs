@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use sdl2::{rect::Rect, render::Canvas, video::Window};
 
 use super::MemoryType;
@@ -40,6 +41,7 @@ struct ObjData {
     y_flip: bool,
     x_flip: bool,
     pal_num: bool,
+    obj_index: usize,
 }
 
 impl ObjData {
@@ -52,6 +54,7 @@ impl ObjData {
             y_flip: false,
             x_flip: false,
             pal_num: false,
+            obj_index: 0,
         }
     }
 }
@@ -67,7 +70,7 @@ pub struct Gpu {
     vram: [u8; 0x2000],
     objects: [ObjData; 40],
     oam: [u8; 0xA0],
-    bg_tiles: [Tile16; 384],
+    tiles: [Tile16; 384],
     clock: u32,
     can_draw: bool,
     //Video registers
@@ -102,6 +105,10 @@ pub struct Gpu {
     //FF49
     object_palette1: [GBColor; 4],
     pixels: [GBColor; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
+    current_window_line: u8,
+    show_background: bool,
+    show_window: bool,
+    show_objects: bool,
 }
 
 impl MemoryType for Gpu {
@@ -157,7 +164,9 @@ impl MemoryType for Gpu {
                 0x45 => {
                     self.vert_line_cp = val;
                 }
-                0x46 => self.dma_write_addr = val,
+                0x46 => {
+                    self.dma_write_addr = val;
+                }
                 0x47 => {
                     self.bg_palette = val;
                     self.update_palette(PaletteType::Background, val);
@@ -185,7 +194,7 @@ impl Gpu {
             objects: [ObjData::new(); 40],
             vram: [0; 0x2000],
             oam: [0; 0xA0],
-            bg_tiles: [make_tile16(); 384],
+            tiles: [make_tile16(); 384],
             can_draw: false,
             lcdc: 0x91,
             lcdc_stat: 0,
@@ -204,7 +213,21 @@ impl Gpu {
             object_palette0: [GBColor::White; 4],
             object_palette1: [GBColor::White; 4],
             clock: 0,
+            current_window_line: 0,
+            show_background: true,
+            show_window: true,
+            show_objects: true,
         }
+    }
+
+    pub(crate) fn debug_toggle_background(&mut self) {
+        self.show_background = !self.show_background;
+    }
+    pub(crate) fn debug_toggle_window(&mut self) {
+        self.show_window = !self.show_window;
+    }
+    pub(crate) fn debug_toggle_objects(&mut self) {
+        self.show_objects = !self.show_objects;
     }
 
     fn is_bit_set(val: u8, bit: u8) -> bool {
@@ -278,12 +301,13 @@ impl Gpu {
                 resulting_color += 2;
             }
 
-            self.bg_tiles[tile as usize][y as usize][x as usize] =
+            self.tiles[tile as usize][y as usize][x as usize] =
                 video::byte_to_color(resulting_color);
         }
     }
     fn update_object_data(&mut self, addr: u16, val: u8) {
         let obj = ((addr & 0x00FF) >> 2) as usize; //Get F9 bits, divide with 4 to get obj correct id
+        self.objects[obj].obj_index = obj;
         match addr & 3 {
             0 => self.objects[obj].y = val,
             1 => self.objects[obj].x = val,
@@ -396,9 +420,24 @@ impl Gpu {
     }
 
     pub fn render_screen(&mut self) {
-        self.render_bg();
-        self.render_window();
-        self.render_objects();
+        if self.show_background {
+            self.render_bg();
+        }
+        if self.show_window {
+            self.render_window();
+        }
+        if self.show_objects {
+            self.render_objects();
+        }
+    }
+
+
+    fn get_tile(&self, addr: u16) -> Tile16 {
+        let raw_tile = self.vram[addr as usize] as i16;
+        if !self.tile_pattern_table_address() && raw_tile < 128 {
+            return self.tiles[(raw_tile + 256) as usize];
+        }
+        self.tiles[raw_tile as usize]
     }
     fn render_bg(&mut self) {
         if !self.should_display_background() {
@@ -426,16 +465,11 @@ impl Gpu {
         let mut canvasoffs: u32 = (self.vert_line as usize * SCREEN_WIDTH) as u32;
 
         // Read tile index from the background map
-        let mut tile = self.vram[(map_offs + line_offset) as usize] as u16;
+        let mut tile = self.get_tile(map_offs + line_offset);
 
-        // If the tile data set in use is #1, the
-        // indices are signed; calculate a real tile offset
-        if self.tile_pattern_table_address() && tile < 128 {
-            tile += 256;
-        }
         for _ in 0..SCREEN_WIDTH {
             // Re-map the tile pixel through the palette
-            let pal_color = self.background_palette[self.bg_tiles[tile as usize][y][x] as usize];
+            let pal_color = self.background_palette[tile[y][x] as usize];
 
             // Plot the pixel to canvas…
             self.pixels[canvasoffs as usize] = pal_color;
@@ -447,14 +481,11 @@ impl Gpu {
             if x == 8 {
                 x = 0;
                 line_offset = (line_offset + 1) & 31;
-                tile = self.vram[(map_offs + line_offset) as usize] as u16;
-                if !self.tile_pattern_table_address() && tile < 128 {
-                    tile += 256;
-                }
+                tile = self.get_tile(map_offs + line_offset);
             }
         }
     }
-    fn render_win dow(&mut self) {
+    fn render_window(&mut self) {
         if !self.should_draw_window() {
             return;
         }
@@ -463,24 +494,26 @@ impl Gpu {
             tilemap_addr_start = 0x1C00
         }
         if self.window_y > self.vert_line {
+            self.current_window_line = 0;
             return;
         }
         if self.window_x < 7 || self.window_x > 166 {
             return;
         }
         let screen_x = self.window_x - 7;
-        let window_offset = self.vert_line - self.window_y;
 
-        let mut canvasoffs = screen_x as usize + (self.vert_line as usize) * SCREEN_WIDTH;
+
+        let mut canvasoffs = screen_x as usize + ((self.vert_line as usize) * SCREEN_WIDTH);
 
         let mut tile_x = 0;
-        let tile_y = window_offset & 7;
+        let tile_y = self.current_window_line & 7;
 
-        let mut line_offset = ((window_offset) >> 3) << 5;
-        let mut tile = self.vram[(tilemap_addr_start + line_offset as u16) as usize] as u16;
+        let mut line_offset = ((self.current_window_line >> 3) << 5) as u16;
+        let mut tile_addr = tilemap_addr_start + line_offset;
+        let mut bg_tile = self.get_tile(tile_addr);
 
         for _ in (screen_x as usize)..SCREEN_WIDTH {
-            let pal_color = self.background_palette[self.bg_tiles[tile as usize][tile_y as usize][tile_x] as usize];
+            let pal_color = self.background_palette[bg_tile[tile_y as usize][tile_x] as usize];
 
             if self.use_zero_as_window_solid() ||
                 (pal_color != GBColor::White && !self.use_zero_as_window_solid()) {
@@ -491,59 +524,104 @@ impl Gpu {
             tile_x += 1;
             if tile_x == 8 {
                 tile_x = 0;
-                line_offset += 1;
-                tile = self.vram[(tilemap_addr_start as usize + line_offset as usize)] as u16;
-                if !self.tile_pattern_table_address() && tile < 128 {
-                    tile += 256;
-                }
+                line_offset = line_offset + 1;
+                bg_tile = self.get_tile(tilemap_addr_start + line_offset);
             }
         }
+        self.current_window_line = self.current_window_line + 1;
     }
 
     fn render_objects(&mut self) {
+        if !self.use_zero_as_window_solid() {
+            return;
+        }
         let use_8x16 = self.use_8x16_sprites();
-        let height = if use_8x16 { 16 } else { 8 };
         let cur_line = self.vert_line as i32;
-        let mut draw_count = 0;
-        for obj in self.objects.iter() {
-            if obj.x == 0 && obj.y == 0 {
+        let height = if use_8x16 { 16 } else { 8 };
+
+        let mut filtered: Vec<&ObjData> = self.objects.iter()
+            .filter(|&&o| o.x != 0 || o.y != 0)
+            .filter(
+                |&&o|
+                    cur_line >= (o.y as i32 - 16) &&
+                        cur_line < ((o.y as i32 - 16) + height))
+            .collect();
+
+        filtered.sort_by(|a, b| {
+            a.x.cmp(&b.x)
+        });
+
+        // Remove sprites that are covered because of a.x == b.x according to obj_index
+        let mut covered = HashSet::new();
+        for i in 0..filtered.len() {
+            if covered.contains(&filtered[i].obj_index) {
                 continue;
             }
-            let screen_x = (obj.x as i32 - 8);
-            let screen_y = (obj.y as i32 - 16);
-            if cur_line >= screen_y  && cur_line < (screen_y + height) {
-                let mut sprite_pattern = (if use_8x16 { obj.pattern_num & 0xFE } else { obj.pattern_num }) as usize;
-                let mut y = cur_line-screen_y;
-                if y >= 8{
-                    sprite_pattern+=1;
-                    y-=8;
+            for j in i + 1..filtered.len() {
+                if covered.contains(&filtered[j].obj_index) {
+                    continue;
                 }
-                for x in 0..8 {
-                    let sprite_x = (if obj.x_flip { 7 - x } else { x }) as usize;
-                    let sprite_y = (if obj.y_flip { 7 - y } else { y }) as usize;
+                if filtered[i].x == filtered[j].x && filtered[i].obj_index < filtered[j].obj_index {
+                    covered.insert(filtered[j].obj_index);
+                }
+            }
+        }
+        let covered_filtered: Vec<&&ObjData> = filtered.iter().filter(|&&&o| !covered.contains(&o.obj_index)).collect();
+
+        for line_x in 0..SCREEN_WIDTH {
+            for obj in &covered_filtered {
+                let screen_x = (obj.x as i32 - 8) as usize;
+                let screen_y = (obj.y as i32 - 16);
+                if screen_x <= line_x && screen_x + 7 >= line_x {
+                    let x = line_x - screen_x;
+                    let mut sprite_pattern = (if use_8x16 { obj.pattern_num & 0xFE } else { obj.pattern_num }) as usize;
+                    let mut y = cur_line - screen_y;
+                    let sprite_x = (if obj.x_flip { 7 - x } else { x });
+                    let mut sprite_y = (if obj.y_flip { (height - 1) - y } else { y }) as usize;
 
                     let palette = match obj.pal_num {
                         false => self.object_palette0,
                         true => self.object_palette1
                     };
+                    if sprite_y >= 8 {
+                        sprite_y -= 8;
+                        sprite_pattern += 1;
+                    }
                     let pal_color = palette
-                        [self.bg_tiles
+                        [self.tiles
                         [sprite_pattern][sprite_y][sprite_x] as usize];
 
                     if pal_color == GBColor::White {
                         continue;
                     }
-                    let pos = (screen_x + x) as usize + (screen_y + y) as usize * SCREEN_WIDTH;
+                    let pos = (screen_x + x) + (screen_y + y) as usize * SCREEN_WIDTH;
                     if !obj.priority || (obj.priority && self.pixels[pos] == GBColor::White) {
                         self.pixels[pos] = pal_color;
                     }
+                    break;
                 }
-                draw_count += 1;
             }
         }
     }
 
-    pub(crate) fn get_bg_tiles(&self) -> &[Tile16; 384] {
-        &self.bg_tiles
+    pub(crate) fn get_tiles(&self) -> &[Tile16; 384] {
+        &self.tiles
+    }
+
+    pub(crate) fn debug_get_background_tilemap(&self) -> [u8; 32 * 32] {
+        let mut map = [0; 32 * 32];
+        let mut map_offs: usize = 0x1800;
+        if self.background_tile_table_address() {
+            map_offs = 0x1C00
+        }
+        for i in 0..(32 * 32) {
+            let raw_tile = self.vram[map_offs + i] as i16;
+            if !self.tile_pattern_table_address() && raw_tile < 128 {
+                map[i] = (raw_tile + 256) as u8;
+            } else {
+                map[i] = raw_tile as u8;
+            }
+        }
+        return map;
     }
 }

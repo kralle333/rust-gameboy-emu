@@ -1,7 +1,6 @@
 mod gpu;
 mod gpu_test;
 mod mem_test;
-mod mmu;
 mod rom;
 mod sound;
 
@@ -15,7 +14,7 @@ use crate::{
     video::{SCREEN_HEIGHT, SCREEN_WIDTH, self},
 };
 
-use self::{gpu::{Gpu}, mmu::Mmu, rom::Rom, sound::Sound};
+use self::{gpu::{Gpu},  rom::Rom, sound::Sound};
 
 const DIVIDER_ADD: i16 = 16384;
 
@@ -43,7 +42,6 @@ struct DivRegister {
 
 pub struct Memory {
     rom: Rom,
-    ram: Mmu,
     gpu: Gpu,
     snd: Sound,
     interupt_enable: u8,
@@ -52,19 +50,20 @@ pub struct Memory {
     in_bios: bool,
 
     //special registers
-    joypad: u8,
     // FF00
-    serial_transfer_data: u8,
+    joypad: u8,
     //FF01
-    serial_transer_control: u8,
+    serial_transfer_data: u8,
     //FF02
-    div_register: DivRegister,
+    serial_transfer_control: u8,
     //FF04
-    timer_counter: u8,
+    div_register: DivRegister,
     //FF05
-    timer_modulo: u8,
+    timer_counter: u8,
     //FF06
-    timer_control: u8,          //FF07
+    timer_modulo: u8,
+    //FF07
+    timer_control: u8,
 }
 
 impl MemoryType for Memory {
@@ -81,12 +80,12 @@ impl MemoryType for Memory {
             0xa000..=0xfdff => self.rom.read_byte(addr),
             0xfe00..=0xfe9f => self.gpu.read_byte(addr),
             0xfea0..=0xfeff => {
-                println!("Reading from empty but unusable for I/O");
+                //println!("Reading from empty but unusable for I/O: 0xfea0-0xff00 {}",addr);
                 0
             }
             0xff00 => self.joypad,
             0xff01 => self.serial_transfer_data,
-            0xff02 => self.serial_transer_control,
+            0xff02 => self.serial_transfer_control,
             0xff04 => self.div_register.val,
             0xff05 => self.timer_counter,
             0xff06 => self.timer_modulo,
@@ -96,7 +95,7 @@ impl MemoryType for Memory {
             0xff40..=0xff4b => self.gpu.read_byte(addr),
             0xff80..=0xfffe => self.rom.read_byte(addr),
             0xff4c..=0xff7f => {
-                println!("Reading from empty but unusable for I/O");
+                //println!("Reading from empty but unusable for I/O: 0xff4c-0xff80 {}",addr);
                 0
             }
             0xffff => self.interupt_enable,
@@ -110,13 +109,31 @@ impl MemoryType for Memory {
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x7fff => self.rom.write_byte(addr, val),
-            0x8000..=0x9fff => self.gpu.write_byte(addr, val),
+            0x8000..=0x9fff => {
+                if addr == 0xff40 { // DMA transfer
+                    let start = (val as u16) << 8;
+                    for i in 0..140u16 {
+                        let from_addr = start + i;
+                        let to_addr = 0xfe00 + i;
+                        self.write_byte(to_addr, self.read_byte(from_addr));
+                    }
+                    return;
+                }
+                self.gpu.write_byte(addr, val);
+            }
             0xa000..=0xfdff => self.rom.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
             0xfea0..=0xfeff => {}
             0xff00 => self.joypad = val,
             0xff01 => self.serial_transfer_data = val,
-            0xff02 => self.serial_transer_control = val,
+            0xff02 => {
+                self.serial_transfer_control = val;
+                // BLARGG
+                if val == 0x81 {
+                    print!("{}", self.serial_transfer_data as char);
+                    self.serial_transfer_control = 0;
+                }
+            }
             0xff04 => self.div_register.val = 0,
             0xff05 => self.timer_counter = val,
             0xff06 => self.timer_modulo = val,
@@ -136,7 +153,6 @@ impl Memory {
     pub fn new() -> Memory {
         let mut mem = Memory {
             rom: Rom::new(),
-            ram: Mmu::new(),
             gpu: Gpu::new(),
             snd: Sound::new(),
             bios: [
@@ -162,7 +178,7 @@ impl Memory {
             interupt_flag: 0,
             joypad: 0,
             serial_transfer_data: 0,
-            serial_transer_control: 0,
+            serial_transfer_control: 0,
             div_register: DivRegister {
                 val: 0,
                 added_this_second: 0,
@@ -229,14 +245,16 @@ impl Memory {
     fn add_to_div(&mut self, amount: u8) {
         self.div_register.val = self.div_register.val.wrapping_add(amount);
     }
-
+    fn is_bit_set(val: u8, bit: u8) -> bool {
+        return (val & (1 << bit)) == (1 << bit);
+    }
     pub fn update_special_registers(&mut self) -> bool {
         // joypad
         self.add_to_div(1); // TODO: figure out correct timing
 
         // timers
         let mut timer_add = 0;
-        if (self.timer_control & (1 << 2)) == (1 << 2) {
+        if Self::is_bit_set(self.timer_control,2){
             let config = self.timer_control & 0b11;
             match config {
                 0x00 => timer_add = 1,  //  4.096 KHz
@@ -275,7 +293,7 @@ impl Memory {
     }
 
     pub(crate) fn write_bg_tiles_to_file(&self) {
-        let bg_tiles = self.gpu.get_bg_tiles();
+        let bg_tiles = self.gpu.get_tiles();
         let mut file = File::create("bg_tiles.txt").unwrap();
         for i in (0..bg_tiles.len()).step_by(4) {
             file.write(
@@ -325,7 +343,14 @@ impl Memory {
         println!("tiles dumped to bg_tiles.txt");
     }
 
-    pub fn dump_bg_tiles(&self) -> &[[[video::GBColor; 8]; 8]; 384] {
-        self.gpu.get_bg_tiles()
+    pub fn dump_tiles(&self) -> &[[[video::GBColor; 8]; 8]; 384] {
+        self.write_bg_tiles_to_file();
+        self.gpu.get_tiles()
     }
+    pub fn debug_get_background_tilemap(&self) -> [u8; 32 * 32] {
+        self.gpu.debug_get_background_tilemap()
+    }
+    pub(crate) fn debug_toggle_background(&mut self) { self.gpu.debug_toggle_background() }
+    pub(crate) fn debug_toggle_window(&mut self) { self.gpu.debug_toggle_window() }
+    pub(crate) fn debug_toggle_objects(&mut self) { self.gpu.debug_toggle_objects() }
 }

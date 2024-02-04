@@ -26,7 +26,7 @@ mod tests {
         22222222
         ";
         let mut memory = Memory::new();
-        
+
         // 00000000
         memory.write_byte(0x8000, 0b00000000);
         memory.write_byte(0x8001, 0b00000000);
@@ -59,7 +59,7 @@ mod tests {
         memory.write_byte(0x800E, 0b00000000);
         memory.write_byte(0x800F, 0b11111111);
 
-        let dumped = memory.dump_bg_tiles();
+        let dumped = memory.dump_tiles();
         let tile = dumped[0];
 
         let vals: Vec<u8> = t
@@ -80,29 +80,34 @@ mod tests {
         let mut memory = Memory::new();
         memory.write_byte(0x8000, 0xff);
         memory.write_byte(0x8001, 0xff);
-        let dumped = memory.dump_bg_tiles();
+        let dumped = memory.dump_tiles();
         for x in 0..8 {
             assert_eq!(dumped[0][0][x], video::GBColor::Black)
         }
 
         memory.write_byte(0x8000, 0xff);
         memory.write_byte(0x8001, 0x00);
-        let dumped = memory.dump_bg_tiles();
+        let dumped = memory.dump_tiles();
         for x in 0..8 {
             assert_eq!(dumped[0][0][x], video::GBColor::LightGray)
         }
 
         memory.write_byte(0x8000, 0x00);
         memory.write_byte(0x8001, 0xff);
-        let dumped = memory.dump_bg_tiles();
+        let dumped = memory.dump_tiles();
         for x in 0..8 {
             assert_eq!(dumped[0][0][x], video::GBColor::DarkGray)
         }
         memory.write_byte(0x8000, 0x00);
         memory.write_byte(0x8001, 0x00);
-        let dumped = memory.dump_bg_tiles();
+        let dumped = memory.dump_tiles();
         for x in 0..8 {
             assert_eq!(dumped[0][0][x], video::GBColor::White)
         }
+    }
+
+    #[test]
+    fn test_unsigned_to_tile_index() {
+        let some_value:u8 = 134;
     }
 }

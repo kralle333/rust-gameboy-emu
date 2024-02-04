@@ -5,15 +5,19 @@ pub enum CartridgeType {
     RomOnly,
     Mbc1,
     Mbc2,
+    Mbc3,
+    Mbc5,
     Invalid = 1000,
 }
 
 impl CartridgeType {
     fn from_u32(val: u32) -> CartridgeType {
         match val {
-            0 | 8 | 9 => CartridgeType::RomOnly,
-            1 | 2 | 3 => CartridgeType::Mbc1,
-            5 | 6 => CartridgeType::Mbc2,
+            0x0 | 0x8 | 0x9 => CartridgeType::RomOnly,
+            0x1 | 0x2 | 0x3 => CartridgeType::Mbc1,
+            0x5 | 0x6 => CartridgeType::Mbc2,
+            0xF | 0x12 | 0x13 | 0x10 | 0x11 => CartridgeType::Mbc3,
+            0x19 | 0x1A | 0x1B | 0x1C | 0x1D | 0x1E => CartridgeType::Mbc5,
             _ => CartridgeType::Invalid,
         }
     }

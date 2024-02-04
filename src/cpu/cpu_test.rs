@@ -159,6 +159,15 @@ mod tests {
         t.assert_eq_flag(Flag::H, false);
         t.assert_eq_flag(Flag::C, true);
         assert_eq!(t.cpu.get_f(), 0b0101_0000);
+
+        t.cpu.reset_all_flags();
+        t.cpu.set_a(0b000_1111);
+        t.cpu.inc_register(Register::A);
+        t.assert_eq_flag(Flag::Z, false);
+        t.assert_eq_flag(Flag::N, false);
+        t.assert_eq_flag(Flag::H, true);
+        t.assert_eq_flag(Flag::C, false);
+
     }
 
     #[test]
@@ -415,15 +424,32 @@ mod tests {
     }
 
     #[test]
+    fn test_push_af() {
+        let mut t = Tester::new();
+
+        t.cpu.AF = 0x1234;
+
+        t.cpu.push_sp(&mut t.mem, t.cpu.AF);
+
+        println!("0x{:x}",t.mem.read_byte(t.cpu.SP + 2));
+        println!("0x{:x}",t.mem.read_byte(t.cpu.SP + 1));
+        println!("0x{:x}",t.mem.read_byte(t.cpu.SP ));
+
+        assert_eq!(t.mem.read_byte(t.cpu.SP + 2), t.cpu.get_a());
+        assert_eq!(t.mem.read_byte(t.cpu.SP + 1), t.cpu.get_f());
+    }
+
+
+    #[test]
     fn test_rst_reti() {
         let mut t = Tester::new();
 
         // "RST 3"
         t.run(0xdf);
-        assert_eq!(t.cpu.PC(),0x18);
+        assert_eq!(t.cpu.PC(), 0x18);
 
         t.run(0xd9);
-        assert_eq!(t.cpu.PC(),0xc000);
+        assert_eq!(t.cpu.PC(), 0xc000);
     }
 
     #[test]

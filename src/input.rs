@@ -18,6 +18,10 @@ pub enum Button {
     Step,
     ToggleStepping,
     Continue,
+
+    ToggleBackground,
+    ToggleWindow,
+    ToggleObjects,
 }
 
 pub struct Input {
@@ -40,7 +44,11 @@ fn get_default_config() -> HashMap<Keycode, Button> {
     keys.insert(Keycode::D, Button::DumpBgTiles);
     keys.insert(Keycode::F8, Button::Step);
     keys.insert(Keycode::F9, Button::Continue);
-    keys.insert(Keycode::F2, Button::ToggleStepping);
+    keys.insert(Keycode::F6, Button::ToggleStepping);
+
+    keys.insert(Keycode::F1, Button::ToggleBackground);
+    keys.insert(Keycode::F2, Button::ToggleWindow);
+    keys.insert(Keycode::F3, Button::ToggleObjects);
 
     keys
 }
@@ -65,6 +73,10 @@ impl Input {
         keys.insert(Button::Continue, false);
         keys.insert(Button::ToggleStepping, false);
 
+        keys.insert(Button::ToggleBackground, false);
+        keys.insert(Button::ToggleWindow, false);
+        keys.insert(Button::ToggleObjects, false);
+
         let mut i = Input {
             key_states: keys,
             prev_key_states: HashMap::new(),
@@ -86,12 +98,14 @@ impl Input {
         let k = key.unwrap();
         match self.mapping.get(&k) {
             Some(b) => {
+                let current = self.key_states.get(b).unwrap();
+                self.prev_key_states.insert(*b,*current);
                 self.key_states.insert(*b, is_down);
             }
             None => {}
         }
     }
-    pub fn set_prev_keys(&mut self) {
+    fn set_prev_keys(&mut self) {
         for state in &self.key_states {
             self.prev_key_states.insert(*state.0, *state.1);
         }

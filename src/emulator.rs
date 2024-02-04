@@ -7,8 +7,10 @@ use sdl2::video::Window;
 use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
+use crate::input::Button::B;
 use crate::memory::{Memory};
 use crate::video;
+use crate::video::GBColor;
 
 #[derive(PartialEq)]
 enum DebugMode {
@@ -43,6 +45,7 @@ impl Config {
         }
     }
 }
+
 impl Emulator {
     pub(crate) fn new(config: Config) -> Emulator {
         let mode = Self::get_initial_debug_mode(&config);
@@ -94,10 +97,9 @@ impl Emulator {
         if !self.draw_tiles {
             return false;
         }
-        let bg_tiles = self.memory.dump_bg_tiles();
-        let mut x_offset = 0;
-        let mut y_offset = 0;
-        for tile in bg_tiles {
+
+        let bg_tiles = self.memory.dump_tiles();
+        let mut draw_tile = |tile: &[[GBColor; 8]; 8]/* Type */, offset_x, offset_y| {
             for x in 0..8 {
                 for y in 0..8 {
                     let c = video::get_color(
@@ -106,8 +108,8 @@ impl Emulator {
                     );
                     canvas.set_draw_color(c);
                     match canvas.fill_rect(Rect::new(
-                        x_offset + x * video::PIXEL_SIZE as i32,
-                        y_offset + y * video::PIXEL_SIZE as i32,
+                        offset_x + x * video::PIXEL_SIZE as i32,
+                        offset_y + y * video::PIXEL_SIZE as i32,
                         video::PIXEL_SIZE as u32,
                         video::PIXEL_SIZE as u32,
                     )) {
@@ -116,8 +118,30 @@ impl Emulator {
                     }
                 }
             }
+        };
+
+        let tilemap = self.memory.debug_get_background_tilemap();
+
+        let mut x_offset = 0;
+        let mut y_offset = 0;
+        for i in 0..tilemap.len(){
+            if i != 0 && (i % 32 == 0) {
+                println!();
+                x_offset = 0;
+                y_offset += 8 * video::PIXEL_SIZE as i32;
+            }
+            let tile_index = tilemap[i] as usize;
+            draw_tile(&bg_tiles[tile_index],x_offset as i32 ,y_offset as i32);
             x_offset += 8 * video::PIXEL_SIZE as i32;
-            if x_offset > 384*2 {
+            print!("{},",tile_index);
+        }
+
+        let mut x_offset = 0;
+        let mut y_offset = 0;
+        for tile in bg_tiles {
+            draw_tile(tile, x_offset, y_offset);
+            x_offset += 8 * video::PIXEL_SIZE as i32;
+            if x_offset > 384 * 2 {
                 x_offset = 0;
                 y_offset += 8 * video::PIXEL_SIZE as i32;
             }
@@ -144,17 +168,28 @@ impl Emulator {
         if keys.is_new_down(&Button::Step) {
             self.step_one = true;
         }
-        if keys.is_new_down(&Button::Continue) && self.debug_mode == DebugMode::Stepping{
+        if keys.is_new_down(&Button::Continue) && self.debug_mode == DebugMode::Stepping {
             self.debug_mode = DebugMode::Breakpoint(self.config.breakpoint);
             self.step_one = false;
         }
-        if keys.is_new_down(&Button::ToggleStepping) {
+        if keys.is_down(&Button::ToggleStepping) {
             self.debug_mode = if self.debug_mode == DebugMode::Stepping {
                 DebugMode::None
             } else {
                 DebugMode::Stepping
             };
         }
+        if keys.is_new_down(&Button::ToggleBackground) {
+            self.memory.debug_toggle_background();
+        }
+        if keys.is_new_down(&Button::ToggleWindow) {
+            self.memory.debug_toggle_window();
+        }
+        if keys.is_new_down(&Button::ToggleObjects) {
+            self.memory.debug_toggle_objects();
+        }
+
+
         match self.debug_mode {
             DebugMode::None => {}
             DebugMode::Stepping => {

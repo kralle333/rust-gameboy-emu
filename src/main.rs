@@ -56,7 +56,6 @@ pub fn main() {
 
 
     'running: loop {
-        input.set_prev_keys();
         let events = sdl.get_events();
         for e in events {
             if let Event::Quit { .. } = e {

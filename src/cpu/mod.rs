@@ -92,6 +92,9 @@ impl Cpu {
     }
 
     pub fn print(&self) {
+        if self.HALT {
+            return;
+        }
         match self.last_instruction {
             Instruction::None => {}
             Instruction::Ok(opcode, _, _, description) => {
@@ -228,21 +231,25 @@ impl Cpu {
     }
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
-        let opcode = mem.read_byte(self.PC);
-        self.last_regs = self.registers_str(&mem);
-        self.last_instruction = match opcode {
-            0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
-            _ => self.execute(opcode, mem),
-        };
-        match self.last_instruction {
-            Instruction::None => {}
-            Instruction::Ok(_, length, clocks, _) => {
-                self.set_clocks(0, clocks);
-                self.PC = self.PC.wrapping_add(length);
+        if !self.HALT {
+            let opcode = mem.read_byte(self.PC);
+            self.last_regs = self.registers_str(&mem);
+            self.last_instruction = match opcode {
+                0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
+                _ => self.execute(opcode, mem),
+            };
+            match self.last_instruction {
+                Instruction::None => {}
+                Instruction::Ok(_, length, clocks, _) => {
+                    self.set_clocks(0, clocks);
+                    self.PC = self.PC.wrapping_add(length);
+                }
+                Instruction::Invalid(opcode) => println!("invalid opcode {}", Self::clean_hex_8(opcode)),
             }
-            Instruction::Invalid(opcode) => println!("invalid opcode {}",Self::clean_hex_8(opcode)),
         }
-        self.check_interrupt_status(mem, opcode);
+        if let Instruction::Ok(last_op, _, _, _) = self.last_instruction {
+            self.check_interrupt_status(mem, last_op);
+        }
     }
 
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {

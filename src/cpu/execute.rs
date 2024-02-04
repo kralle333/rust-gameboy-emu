@@ -115,7 +115,8 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "ADD HL,DE")
             }
             0x1a => {
-                self.set_a(mem.read_byte(self.DE));
+                let value = mem.read_byte(self.DE);
+                self.set_a(value);
                 Instruction::Ok(opcode, 1, 2, "LD A, (DE)")
             }
             0x1b => {
@@ -244,7 +245,7 @@ impl Cpu {
             }
             0x32 => {
                 mem.write_byte(self.HL, self.get_a());
-                self.HL -= 1;
+                self.HL = self.HL.wrapping_sub(1);
                 Instruction::Ok(opcode, 1, 8, "LD (HL-),A")
             }
             0x33 => {
@@ -288,7 +289,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD A,(HL-)")
             }
             0x3b => {
-                self.SP = self.sub_16(self.SP, 1);
+                self.SP = self.SP.wrapping_sub(1);
                 Instruction::Ok(opcode, 1, 2, "DEC SP")
             }
             0x3c => {
@@ -526,7 +527,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD (HL), L")
             }
             0x76 => {
-                // TODO: Figure out HALT
+                self.HALT = true;
                 Instruction::Ok(opcode, 1, 4, "HALT")
             }
             0x77 => {

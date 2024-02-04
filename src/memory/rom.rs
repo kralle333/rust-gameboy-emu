@@ -19,9 +19,10 @@ pub struct Rom {
     //Access
     rom_offset: usize,
     ram_offset: usize,
+
+    //Info
     mbc_mode: MbcMode,
     ram_enabled: bool,
-    //Info
 }
 
 impl MemoryType for Rom {
@@ -79,13 +80,16 @@ impl Rom {
                 if rom_bank == 0 {
                     rom_bank = 1;
                 }
-                self.rom_offset = match self.mbc_mode {
+                let new_offset = match self.mbc_mode {
                     MbcMode::None => 0x4000,
                     MbcMode::Mbc1_16mbRom8kbRam => (rom_bank as usize) * 0x4000,
                     MbcMode::Mbc1_4mbRom32kbRam => (rom_bank as usize) * 4 * 0x1000,
-                    _ => unimplemented!(),
+                    _ => 0x4000,
                 };
-                println!("switched to rom bank {rom_bank}");
+                if self.rom_offset != new_offset {
+                    self.rom_offset = new_offset;
+                    println!("switched to rom bank {rom_bank}");
+                }
             }
             0x4000..=0x5fff => {
                 if self.mbc_mode == MbcMode::Mbc1_4mbRom32kbRam {
@@ -102,7 +106,7 @@ impl Rom {
                         MbcMode::Mbc1_4mbRom32kbRam
                     };
                 if self.mbc_mode != new_mode {
-                    println!("switched mbc1 mode: {:?}", new_mode);
+                    //println!("switched mbc1 mode: {:?}", new_mode);
                     self.mbc_mode = new_mode;
                 }
             }
@@ -118,6 +122,8 @@ impl Rom {
             CartridgeType::RomOnly => self.mbc_mode = MbcMode::None,
             CartridgeType::Mbc1 => self.mbc_mode = MbcMode::Mbc1_16mbRom8kbRam,
             CartridgeType::Mbc2 => todo!(),
+            CartridgeType::Mbc3 => todo!(),
+            CartridgeType::Mbc5 => todo!(),
             CartridgeType::Invalid => todo!(),
         }
     }
