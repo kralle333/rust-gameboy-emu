@@ -41,7 +41,7 @@ impl Cpu {
             0x08 => {
                 let addr = self.get_nn(mem);
                 mem.write_word(addr, self.SP);
-                Instruction::Ok(opcode, 2, 12, "LD (a16),SP")
+                Instruction::Ok(opcode, 3, 20, "LD (a16),SP")
             }
             0x09 => {
                 self.HL = self.add_16(self.HL, self.BC);
