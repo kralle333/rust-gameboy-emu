@@ -968,8 +968,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 3, 12, "CALL C, a16")
             }
             0xdd => {
-                self.call_a16(mem);
-                return Instruction::Ok(opcode, 0, 24, "CALL a16");
+                panic!("invalid opcode {}",opcode);
             }
             0xde => {
                 self.sbc_a(self.get_n(mem));

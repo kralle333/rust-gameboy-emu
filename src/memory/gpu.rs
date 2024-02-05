@@ -121,7 +121,8 @@ impl MemoryType for Gpu {
                 0x41 => self.lcdc_stat,
                 0x42 => self.scroll_y,
                 0x43 => self.scroll_x,
-                0x44 => self.vert_line,
+                0x44 =>
+                    0x90, // DOCTOR: self.vert_line,
                 0x45 => self.vert_line_cp,
                 0x47 => self.bg_palette,
                 0x48 => self.obj_palette0,

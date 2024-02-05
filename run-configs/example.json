@@ -1,0 +1,8 @@
+{
+  "pathToRom": "roms/some-rom.gb",
+  "useDoctor": true,
+  "breakpointAtInstructionCount": 130,
+  "breakpointAtPc": 0,
+  "printCpu": false,
+  "useStepping": false
+}

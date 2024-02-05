@@ -220,6 +220,16 @@ mod tests {
         assert_eq!(t.cpu.SP,153);
     }
 
+    #[test]
+    fn test_push_pop_hl(){
+        let mut t = Tester::new();
+        t.cpu.SP = 0x1234;
+        t.run(0xe5);
+        assert_ne!(t.cpu.SP,0x1234);
+        t.run(0xe1);
+        assert_eq!(t.cpu.SP,0x1234);
+    }
+
 
 
     #[test]
@@ -449,12 +459,11 @@ mod tests {
 
     #[test]
     fn test_jp_addr_h16() {
-        //0xc3 JP ad8
+        //0xe9 JP (HL)
         let mut t = Tester::new();
         t.cpu.HL = 0xD002;
-        t.mem.write_word(0xD002, 0x108);
         t.run(0xe9);
-        assert_eq!(t.cpu.PC, 0x108);
+        assert_eq!(t.cpu.PC, 0xD002);
     }
 
     #[test]

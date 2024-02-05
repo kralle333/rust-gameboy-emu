@@ -1,13 +1,13 @@
 use std::fs;
-
+use std::fs::OpenOptions;
 use sdl2::rect::{Rect};
 use sdl2::render::Canvas;
 use sdl2::video::Window;
+use serde::Deserialize;
 
 use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
-use crate::input::Button::B;
 use crate::memory::{Memory};
 use crate::video;
 use crate::video::GBColor;
@@ -22,33 +22,52 @@ enum DebugMode {
 pub struct Emulator {
     cpu: Cpu,
     memory: Memory,
-    config: Config,
+    config: RunConfig,
     debug_mode: DebugMode,
     loaded_rom: String,
     step_one: bool,
     draw_tiles: bool,
 }
 
-#[derive(Default)]
-pub(crate) struct Config {
+#[derive(Default, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RunConfig {
+    pub(crate) path_to_rom: String,
+    use_doctor: bool,
+    breakpoint_at_pc: u16,
+    breakpoint_at_instruction_count: u128,
     print_cpu: bool,
-    stepping_enabled: bool,
-    breakpoint: u16,
+    use_stepping: bool,
 }
 
-impl Config {
-    pub fn new(print_cpu: bool, stepping_enabled: bool, breakpoint: u16) -> Self {
+impl RunConfig {
+    pub(crate) fn validate(&self) {
+        // panic if not valid
+    }
+}
+
+impl RunConfig {
+    pub fn new(print_cpu: bool, use_stepping: bool, breakpoint_at_pc: u16) -> Self {
         Self {
             print_cpu,
-            stepping_enabled,
-            breakpoint,
+            use_stepping,
+            breakpoint_at_pc,
+            ..Default::default()
         }
     }
 }
 
 impl Emulator {
-    pub(crate) fn new(config: Config) -> Emulator {
+    pub(crate) fn new(config: RunConfig) -> Emulator {
         let mode = Self::get_initial_debug_mode(&config);
+        if config.use_doctor{
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true) // Truncate the file, removing existing content
+                .open("blargg_log_instr.txt")
+                .expect("cannot open file");
+        }
         Emulator {
             cpu: Cpu::new(),
             memory: Memory::new(),
@@ -59,10 +78,10 @@ impl Emulator {
             draw_tiles: false,
         }
     }
-    fn get_initial_debug_mode(config: &Config) -> DebugMode {
-        if config.breakpoint != 0 {
-            DebugMode::Breakpoint(config.breakpoint)
-        } else if config.stepping_enabled {
+    fn get_initial_debug_mode(config: &RunConfig) -> DebugMode {
+        if config.breakpoint_at_pc != 0 {
+            DebugMode::Breakpoint(config.breakpoint_at_pc)
+        } else if config.use_stepping {
             DebugMode::Stepping
         } else {
             DebugMode::None
@@ -124,16 +143,16 @@ impl Emulator {
 
         let mut x_offset = 0;
         let mut y_offset = 0;
-        for i in 0..tilemap.len(){
+        for i in 0..tilemap.len() {
             if i != 0 && (i % 32 == 0) {
                 println!();
                 x_offset = 0;
                 y_offset += 8 * video::PIXEL_SIZE as i32;
             }
             let tile_index = tilemap[i] as usize;
-            draw_tile(&bg_tiles[tile_index],x_offset as i32 ,y_offset as i32);
+            draw_tile(&bg_tiles[tile_index], x_offset as i32, y_offset as i32);
             x_offset += 8 * video::PIXEL_SIZE as i32;
-            print!("{},",tile_index);
+            print!("{},", tile_index);
         }
 
         let mut x_offset = 0;
@@ -155,6 +174,19 @@ impl Emulator {
         self.memory.reset();
     }
 
+    fn tick_debug(&mut self) {
+        if self.debug_mode == DebugMode::None {
+            if self.cpu.has_reached_operation_count(self.config.breakpoint_at_instruction_count) {
+                self.debug_mode = DebugMode::Stepping;
+                self.config.print_cpu = true;
+                println!("Stepping: reached breakpoint instruction count {}",self.config.breakpoint_at_instruction_count);
+            } else if self.cpu.PC() == self.config.breakpoint_at_pc {
+                self.debug_mode = DebugMode::Stepping;
+                self.config.print_cpu = true;
+                println!("Stepping: reached breakpoint PC {}",self.config.breakpoint_at_pc);
+            }
+        }
+    }
     fn check_debug_input(&mut self, keys: &Input) -> bool {
         if keys.is_new_down(&Button::Reset) {
             self.reload_rom();
@@ -169,7 +201,7 @@ impl Emulator {
             self.step_one = true;
         }
         if keys.is_new_down(&Button::Continue) && self.debug_mode == DebugMode::Stepping {
-            self.debug_mode = DebugMode::Breakpoint(self.config.breakpoint);
+            self.debug_mode = DebugMode::Breakpoint(self.config.breakpoint_at_pc);
             self.step_one = false;
         }
         if keys.is_down(&Button::ToggleStepping) {
@@ -189,28 +221,15 @@ impl Emulator {
             self.memory.debug_toggle_objects();
         }
 
-
-        match self.debug_mode {
-            DebugMode::None => {}
-            DebugMode::Stepping => {
-                if !self.step_one {
-                    return false;
-                }
-            }
-            DebugMode::Breakpoint(addr) => {
-                if self.cpu.PC() == addr {
-                    self.debug_mode = DebugMode::Stepping;
-                    self.config.print_cpu = true;
-                    println!("Reached breakpoint {:#0x}, entering stepping mode", addr);
-                    return false;
-                }
-            }
-        }
         true
     }
 
     pub fn tick(&mut self, keys: &Input) {
         if !self.check_debug_input(keys) {
+            return;
+        }
+        self.tick_debug();
+        if self.debug_mode == DebugMode::Stepping && !self.step_one{
             return;
         }
 

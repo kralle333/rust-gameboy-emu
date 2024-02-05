@@ -3,10 +3,10 @@ use crate::memory::{self, Memory, MemoryType};
 use super::{Cpu, Flag, Register};
 
 impl Cpu {
-    pub fn get_n(&self, mem: &mut memory::Memory) -> u8 {
+    pub fn get_n(&self, mem: &mut Memory) -> u8 {
         mem.read_byte(self.PC + 1)
     }
-    pub fn get_nn(&self, mem: &memory::Memory) -> u16 {
+    pub fn get_nn(&self, mem: &Memory) -> u16 {
         mem.read_word(self.PC + 1)
     }
 
@@ -34,7 +34,18 @@ impl Cpu {
         self.set_flag(Flag::C, carry);
     }
     pub fn adc_a(&mut self, b: u8) {
-        self.add_a(b + self.get_flag(Flag::C) as u8);
+        let before_a = self.get_a();
+        let carry = self.get_flag(Flag::C);
+
+        let half_carry = Self::is_half_carry_add(before_a, b) || Self::is_half_carry_add(before_a, (b & 0x0F) + carry as u8);
+
+        let result = before_a.wrapping_add(b).wrapping_add(carry as u8);
+        self.set_flag(Flag::Z, result == 0);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, half_carry);
+        self.set_flag(Flag::C, carry);
+
+        self.set_a(result);
     }
     pub fn sub_a(&mut self, b: u8) {
         let a = self.get_a();
@@ -47,13 +58,22 @@ impl Cpu {
         self.set_flag(Flag::C, borrow);
     }
     pub fn sbc_a(&mut self, b: u8) {
-        self.sub_a(b + self.get_flag(Flag::C) as u8);
+        let first = self.get_a() as u32;
+        let second = b as u32;
+        let carry = self.get_flag(Flag::C) as u32;
+
+        let result = first.wrapping_sub(second).wrapping_sub(carry);
+        let result_b = result as u8;
+
+        self.set_flag(Flag::N, true);
+        self.set_flag(Flag::Z, result_b == 0);
+        self.set_flag(Flag::H, (first ^ second ^ result) & 0x10 == 0x10);
+        self.set_flag(Flag::C, (result & 0x100) == 0x100);
     }
 
-    pub fn add_sp_16_signed(&mut self, val:u8){
-
+    pub fn add_sp_16_signed(&mut self, val: u8) {
         let sp_as_signed = self.SP as i32;
-        let n_as_signed =  val as i8;
+        let n_as_signed = val as i8;
         let n_as_signed_i32 = n_as_signed as i32;
         let result = sp_as_signed.wrapping_add(n_as_signed_i32);
 
@@ -112,8 +132,7 @@ impl Cpu {
         self.set_a(a);
     }
     pub fn jump_relative(&mut self, amount: i8) {
-        self.PC += 2;
-        let result = (self.PC).wrapping_add(amount as u16);
+        let result = (self.PC + 2).wrapping_add(amount as u16);
         self.PC = result as u16;
     }
     pub fn jump_relative_with_flag(&mut self, amount: i8, flag: Flag, flag_set: bool) -> bool {
@@ -172,7 +191,7 @@ impl Cpu {
     }
 
     pub fn rst(&mut self, mem: &mut Memory, addr: u16) {
-        self.push_sp(mem, self.PC - 1);
+        self.push_sp(mem, self.PC );
         self.PC = addr;
         self.IME = false;
         self.HALT = false;

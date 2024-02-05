@@ -2,3 +2,5 @@
 /roms
 bg_tiles.txt
 .vscode/launch.json
+run-configs/*.json
+!run-configs/example.json

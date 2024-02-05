@@ -7,40 +7,38 @@ mod sdl_wrapper;
 mod video;
 
 extern crate sdl2;
+extern crate serde;
+extern crate serde_json;
 
+use crate::emulator::RunConfig;
+use std::io::Read;
+use std::path::Path;
 use sdl2::{event::Event, pixels::Color};
+use serde::{Serialize, Deserialize};
+use std::fs::read_to_string;
 
-use std::time::Duration;
-
-fn arg_to_bool(arg: &str) -> bool {
-    match arg {
-        "true" => true,
-        _ => false,
-    }
-}
 
 pub fn main() {
-    //Rewrite this into some kind of emulator config
-    let rom_path = std::env::args().nth(1).expect("no rom path given");
-
-    let print_cpu = arg_to_bool(std::env::args().nth(2).unwrap_or_default().as_str());
-    let use_stepping = arg_to_bool(std::env::args().nth(3).unwrap_or_default().as_str());
-
-    let breakpoint_str = format!("{}", std::env::args().nth(4).unwrap_or_default());
-    let breakpoint = if breakpoint_str.is_empty() {
-        0x0
-    } else {
-        match u16::from_str_radix(&breakpoint_str.trim_start_matches("0x"), 16) {
-            Ok(addr) => addr,
-            Err(err) => panic!("invalid breakpoint {breakpoint_str} err: {err}"),
+    let first_argument = std::env::args().nth(1).expect("missing first argument");
+    let path_to_arg = Path::new(&first_argument);
+    if !path_to_arg.exists() {
+        panic!("unknown file: {}", first_argument);
+    }
+    let (path_to_rom, config_to_use) = match first_argument.as_str() {
+        _ if first_argument.ends_with(".gb") => { (first_argument, RunConfig::default()) }
+        _ if first_argument.ends_with(".json") => {
+            let conf:RunConfig = serde_json::from_str(&read_to_string(path_to_arg).unwrap()).unwrap();
+            let path_to_rom = conf.path_to_rom.to_string();
+            (path_to_rom, conf)
         }
+        _ => {panic!("unknown arg given")}
     };
 
-    let mut sdl = sdl_wrapper::SdlWrapper::new();
+    config_to_use.validate();
 
-    let config = emulator::Config::new(print_cpu, use_stepping, breakpoint);
-    let mut emulator = emulator::Emulator::new(config);
-    emulator.load_rom(&rom_path.to_string());
+    let mut sdl = sdl_wrapper::SdlWrapper::new();
+    let mut emulator = emulator::Emulator::new(config_to_use);
+    emulator.load_rom(&path_to_rom);
 
     let mut debug_canvas = sdl.get_window_canvas("tiles", 384 * 2, 500);
 

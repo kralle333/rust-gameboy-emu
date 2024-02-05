@@ -4,6 +4,8 @@ mod execute_cb;
 mod helpers;
 mod helpers_cb;
 
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::ops::{Shl, Shr};
 
 use crate::memory::{self, MemoryType};
@@ -37,6 +39,7 @@ pub struct Cpu {
     triggered_interruption: String,
     last_instruction: Instruction,
     last_regs: String,
+    operations: u128,
 }
 
 #[derive(Clone, Copy)]
@@ -90,7 +93,12 @@ impl Cpu {
         }
         self.fetch_decode(mem);
     }
-
+    pub(crate) fn has_reached_operation_count(&self, p0: u128) -> bool {
+        if p0 == 0{
+            return false;
+        }
+        return self.operations == p0;
+    }
     pub fn print(&self) {
         if self.HALT {
             return;
@@ -98,6 +106,15 @@ impl Cpu {
         match self.last_instruction {
             Instruction::None => {}
             Instruction::Ok(opcode, _, _, description) => {
+
+
+                let mut log_file = OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open("blargg_log_instr.txt")
+                    .expect("cannot open file");
+
+                log_file.write(format!("{}\n", self.last_regs).as_bytes()).expect("TODO: panic message");
                 println!(
                     "{0:010}|op:{1} {2}",
                     description,
@@ -233,7 +250,7 @@ impl Cpu {
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         if !self.HALT {
             let opcode = mem.read_byte(self.PC);
-            self.last_regs = self.registers_str(&mem);
+            self.last_regs = self.regisers_doctor_str(&mem);
             self.last_instruction = match opcode {
                 0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
                 _ => self.execute(opcode, mem),
@@ -247,6 +264,7 @@ impl Cpu {
                 Instruction::Invalid(opcode) => println!("invalid opcode {}", Self::clean_hex_8(opcode)),
             }
         }
+        self.operations += 1;
         if let Instruction::Ok(last_op, _, _, _) = self.last_instruction {
             self.check_interrupt_status(mem, last_op);
         }
@@ -303,10 +321,10 @@ impl Cpu {
     }
 
     fn clean_hex_8(v: u8) -> String {
-        format!("{0:#04x}", v).replace("0x", "")
+        format!("{0:#04X}", v).replace("0x", "")
     }
     fn clean_hex_16(v: u16) -> String {
-        format!("{0:#06x}", v).replace("0x", "")
+        format!("{0:#06X}", v).replace("0x", "")
     }
     fn clean_b_8(v: u8) -> String {
         format!("{0:#06b}", v >> 4).replace("0b", "")
@@ -324,6 +342,27 @@ impl Cpu {
         s = format!("{s} H:{0}", Self::clean_hex_8(self.get_h()));
         s = format!("{s} L:{0}", Self::clean_hex_8(self.get_l()));
         s = format!("{s} nn:{0}", Self::clean_hex_16(self.get_nn(mem)));
+        s
+    }
+
+    //A:00 F:11 B:22 C:33 D:44 E:55 H:66 L:77 SP:8888 PC:9999 PCMEM:AA,BB,CC,DD
+    fn regisers_doctor_str(&mut self, mem: &memory::Memory) -> String {
+        let mut s;
+        s = format!("A:{0}", Self::clean_hex_8(self.get_a()));
+        s = format!("{s} F:{0}", Self::clean_hex_8(self.get_f()));
+        s = format!("{s} B:{0}", Self::clean_hex_8(self.get_b()));
+        s = format!("{s} C:{0}", Self::clean_hex_8(self.get_c()));
+        s = format!("{s} D:{0}", Self::clean_hex_8(self.get_d()));
+        s = format!("{s} E:{0}", Self::clean_hex_8(self.get_e()));
+        s = format!("{s} H:{0}", Self::clean_hex_8(self.get_h()));
+        s = format!("{s} L:{0}", Self::clean_hex_8(self.get_l()));
+        s = format!("{s} SP:{0}", Self::clean_hex_16(self.SP));
+        s = format!("{s} PC:{0}", Self::clean_hex_16(self.PC));
+        s = format!("{s} PCMEM:{0},{1},{2},{3}",
+                    Self::clean_hex_8(mem.read_byte(self.PC)),
+                    Self::clean_hex_8(mem.read_byte(self.PC + 1)),
+                    Self::clean_hex_8(mem.read_byte(self.PC + 2)),
+                    Self::clean_hex_8(mem.read_byte(self.PC + 3)));
         s
     }
 }
