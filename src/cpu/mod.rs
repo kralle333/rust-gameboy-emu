@@ -31,8 +31,9 @@ pub struct Cpu {
     IME: bool,
     HALT: bool,
 
-    DI: bool,
-    EI: bool,
+    in_interrupt: bool,
+    enable_IME_at_operation: u128,
+    disable_IME_at_operation: u128,
     clock_m: u8,
     clock_t: u32,
 
@@ -40,9 +41,11 @@ pub struct Cpu {
     last_instruction: Instruction,
     last_regs: String,
     operations: u128,
+    doctor_buffer: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub enum Register {
     A,
     B,
@@ -80,8 +83,8 @@ impl Cpu {
         self.clock_t = 1;
         self.IME = false;
         self.HALT = false;
-        self.DI = false;
-        self.EI = false;
+        self.enable_IME_at_operation = u128::MAX;
+        self.disable_IME_at_operation = u128::MAX;
         self.last_instruction = Instruction::None;
         self.last_regs = "".to_string();
         self.triggered_interruption = "".to_string();
@@ -94,7 +97,7 @@ impl Cpu {
         self.fetch_decode(mem);
     }
     pub(crate) fn has_reached_operation_count(&self, p0: u128) -> bool {
-        if p0 == 0{
+        if p0 == 0 {
             return false;
         }
         return self.operations == p0;
@@ -106,15 +109,6 @@ impl Cpu {
         match self.last_instruction {
             Instruction::None => {}
             Instruction::Ok(opcode, _, _, description) => {
-
-
-                let mut log_file = OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .open("blargg_log_instr.txt")
-                    .expect("cannot open file");
-
-                log_file.write(format!("{}\n", self.last_regs).as_bytes()).expect("TODO: panic message");
                 println!(
                     "{0:010}|op:{1} {2}",
                     description,
@@ -131,6 +125,29 @@ impl Cpu {
         }
     }
 
+    pub fn write_buffered_doctor_lines(&mut self) {
+        let mut log_file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open("blargg_log_instr.txt")
+            .expect("cannot open file");
+
+        for x in &self.doctor_buffer {
+            log_file.write(x.as_bytes()).expect("!!!!");
+        }
+        self.doctor_buffer.clear();
+    }
+    pub fn write_doctor(&mut self) {
+        if self.HALT {
+            return;
+        }
+        if let Instruction::Ok(_, _, _, _) = self.last_instruction {
+            self.doctor_buffer.push(format!("{}\n", self.last_regs));
+            if self.doctor_buffer.len() == 1000 {
+                self.write_buffered_doctor_lines();
+            }
+        }
+    }
     pub fn get_clock_t(&self) -> u32 {
         self.clock_t
     }
@@ -248,38 +265,37 @@ impl Cpu {
     }
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
-        if !self.HALT {
-            let opcode = mem.read_byte(self.PC);
-            self.last_regs = self.regisers_doctor_str(&mem);
-            self.last_instruction = match opcode {
-                0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
-                _ => self.execute(opcode, mem),
-            };
-            match self.last_instruction {
-                Instruction::None => {}
-                Instruction::Ok(_, length, clocks, _) => {
-                    self.set_clocks(0, clocks);
-                    self.PC = self.PC.wrapping_add(length);
-                }
-                Instruction::Invalid(opcode) => println!("invalid opcode {}", Self::clean_hex_8(opcode)),
+        self.check_interrupt_status(mem);
+        if self.HALT {
+            return;
+        }
+        let opcode = mem.read_byte(self.PC);
+        self.last_regs = self.registers_doctor_str(&mem);
+        self.last_instruction = match opcode {
+            0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
+            _ => self.execute(opcode, mem),
+        };
+        match self.last_instruction {
+            Instruction::None => {}
+            Instruction::Ok(_, length, clocks, _) => {
+                self.set_clocks(0, clocks);
+                self.PC = self.PC.wrapping_add(length);
             }
+            Instruction::Invalid(opcode) => println!("invalid opcode {}", Self::clean_hex_8(opcode)),
         }
         self.operations += 1;
-        if let Instruction::Ok(last_op, _, _, _) = self.last_instruction {
-            self.check_interrupt_status(mem, last_op);
-        }
     }
 
-    fn check_interrupt_status(&mut self, mem: &mut memory::Memory, last_opcode: u8) {
+    fn check_interrupt_status(&mut self, mem: &mut memory::Memory) {
         self.triggered_interruption = "".to_string();
 
         //Go through the five different interrupts and see if any is triggered
-        if self.DI && last_opcode & 0xf3 != last_opcode {
-            self.DI = false;
+        if self.disable_IME_at_operation == self.operations {
+            self.disable_IME_at_operation = 0;
             self.IME = false;
         }
-        if self.EI && last_opcode & 0xfb != last_opcode {
-            self.EI = false;
+        if self.enable_IME_at_operation == self.operations {
+            self.enable_IME_at_operation = 0;
             self.IME = true;
         }
         if !self.IME {
@@ -291,31 +307,21 @@ impl Cpu {
 
         let to_fire = enabled_interrupts & interrupt_flag;
 
-        for i in 0..=4 {
-            let interrupt = to_fire & (1 << i);
-            if interrupt == 0 {
+        for (interrupt, reset_address, interrupt_name) in [
+            (0b00001, 0x40, "LCD vertical blanking impulse"),
+            (0b00010, 0x48, "LY=LYC"),
+            (0b00100, 0x50, "Timer overflow"),
+            (0b01000, 0x58, "End of serial I/O transfer"),
+            (0b10000, 0x60, "Transition High->Low on pins P10-P13")] {
+            if (interrupt_flag & to_fire) == 0 {
                 continue;
             }
-            let restart_address: u16;
-            match i {
-                0 => restart_address = 0x40,
-                1 => restart_address = 0x48,
-                2 => restart_address = 0x50,
-                3 => restart_address = 0x58,
-                4 => restart_address = 0x60,
-                _ => panic!("unknown flag"),
-            }
-            let interrupt_name = match i {
-                0 => "LCD vertical blanking impulse",
-                1 => "LY=LYC",
-                2 => "Timer overflow",
-                3 => "End of serial I/O transfer",
-                4 => "Transition High->Low on pins P10-P13",
-                _ => panic!("unknown flag")
-            };
+
             self.triggered_interruption = interrupt_name.to_string();
-            mem.write_byte(0xFF0F, interrupt_flag & !(1 << i));
-            self.rst(mem, restart_address);
+            mem.write_byte(0xFF0F, interrupt_flag & !interrupt);
+            self.rst(mem, reset_address);
+            self.IME = false;
+            self.in_interrupt = true;
             return;
         }
     }
@@ -326,9 +332,11 @@ impl Cpu {
     fn clean_hex_16(v: u16) -> String {
         format!("{0:#06X}", v).replace("0x", "")
     }
+    #[allow(dead_code)]
     fn clean_b_8(v: u8) -> String {
         format!("{0:#06b}", v >> 4).replace("0b", "")
     }
+    #[allow(dead_code)]
     fn registers_str(&self, mem: &memory::Memory) -> String {
         let mut s;
         s = format!("PC:{0}", Self::clean_hex_16(self.PC));
@@ -346,7 +354,7 @@ impl Cpu {
     }
 
     //A:00 F:11 B:22 C:33 D:44 E:55 H:66 L:77 SP:8888 PC:9999 PCMEM:AA,BB,CC,DD
-    fn regisers_doctor_str(&mut self, mem: &memory::Memory) -> String {
+    fn registers_doctor_str(&mut self, mem: &memory::Memory) -> String {
         let mut s;
         s = format!("A:{0}", Self::clean_hex_8(self.get_a()));
         s = format!("{s} F:{0}", Self::clean_hex_8(self.get_f()));

@@ -2,7 +2,7 @@
 mod tests {
     use crate::{
         memory::{gpu::TickMode, Memory, MemoryType},
-        video::{self, SCREEN_HEIGHT},
+        video::{self},
     };
 
     #[test]
@@ -14,7 +14,7 @@ mod tests {
 
     #[test]
     fn test_draw_bg_tile() {
-        let mut target = vec![vec![video::GBColor::White; 8]; 8];
+        let _target = vec![vec![video::GBColor::White; 8]; 8];
         let t = "
         00000000
         01111110
@@ -108,6 +108,6 @@ mod tests {
 
     #[test]
     fn test_unsigned_to_tile_index() {
-        let some_value:u8 = 134;
+        let _some_value:u8 = 134;
     }
 }

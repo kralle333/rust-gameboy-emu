@@ -1,5 +1,6 @@
 use sdl2::{event::Event, AudioSubsystem, EventPump, Sdl, VideoSubsystem};
 
+#[allow(dead_code)]
 pub struct SdlWrapper {
     context: Sdl,
     video: VideoSubsystem,

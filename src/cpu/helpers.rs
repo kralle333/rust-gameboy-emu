@@ -1,4 +1,4 @@
-use crate::memory::{self, Memory, MemoryType};
+use crate::memory::{Memory, MemoryType};
 
 use super::{Cpu, Flag, Register};
 
@@ -35,11 +35,16 @@ impl Cpu {
     }
     pub fn adc_a(&mut self, b: u8) {
         let before_a = self.get_a();
-        let carry = self.get_flag(Flag::C);
+        let carry_val = self.get_flag(Flag::C) as u8;
 
-        let half_carry = Self::is_half_carry_add(before_a, b) || Self::is_half_carry_add(before_a, (b & 0x0F) + carry as u8);
+        let half_carry = Self::is_half_carry_add(before_a, b) || Self::is_half_carry_add(before_a, (b & 0x0F) + carry_val as u8);
 
-        let result = before_a.wrapping_add(b).wrapping_add(carry as u8);
+        let result = before_a.wrapping_add(b).wrapping_add(carry_val as u8);
+
+        let carry = before_a.checked_add(b).is_none() ||
+            b.checked_add(carry_val).is_none() ||
+            b.checked_add(before_a.wrapping_add(carry_val)).is_none();
+
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, half_carry);
@@ -183,19 +188,23 @@ impl Cpu {
 
     pub fn ret(&mut self, mem: &mut Memory) {
         self.PC = self.pop_sp(mem);
+        if self.in_interrupt{
+            self.in_interrupt = false;
+        }
     }
 
     pub fn call_a16(&mut self, mem: &mut Memory) {
-        self.push_sp(mem, self.PC + 2);
+        self.push_sp(mem, self.PC + 3);
         self.PC = self.get_nn(mem);
     }
 
     pub fn rst(&mut self, mem: &mut Memory, addr: u16) {
-        self.push_sp(mem, self.PC );
+        self.push_sp(mem, self.PC + 1);
         self.PC = addr;
         self.IME = false;
         self.HALT = false;
     }
+
     pub fn inc_8(&mut self, val: u8) -> u8 {
         let mut val = val;
         let borrow = Self::is_half_carry_add(val, 1);

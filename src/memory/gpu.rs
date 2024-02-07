@@ -1,6 +1,7 @@
-use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+
+use std::collections::{HashSet};
 use sdl2::{rect::Rect, render::Canvas, video::Window};
+use sdl2::render::Texture;
 
 use super::MemoryType;
 use crate::video::{self, GBColor, SCREEN_HEIGHT, SCREEN_WIDTH};
@@ -336,6 +337,23 @@ impl Gpu {
         };
     }
 
+    pub fn draw_texture(&mut self, texture:  &mut Texture) -> bool {
+        if !self.can_draw || !self.lcd_operation() {
+            return false;
+        }
+        self.can_draw = false;
+        texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+            let scheme = &video::ColorScheme::BlackWhite;
+            for i in 0..SCREEN_WIDTH * SCREEN_HEIGHT {
+                let color = video::get_color(&self.pixels[i], scheme);
+                buffer[i] = color.r;
+                buffer[i+1] = color.g;
+                buffer[i+2] = color.b;
+            }
+        }).unwrap();
+        return true;
+    }
+
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         if !self.can_draw || !self.lcd_operation() {
             return false;
@@ -510,7 +528,7 @@ impl Gpu {
         let tile_y = self.current_window_line & 7;
 
         let mut line_offset = ((self.current_window_line >> 3) << 5) as u16;
-        let mut tile_addr = tilemap_addr_start + line_offset;
+        let tile_addr = tilemap_addr_start + line_offset;
         let mut bg_tile = self.get_tile(tile_addr);
 
         for _ in (screen_x as usize)..SCREEN_WIDTH {
@@ -572,12 +590,12 @@ impl Gpu {
         for line_x in 0..SCREEN_WIDTH {
             for obj in &covered_filtered {
                 let screen_x = (obj.x as i32 - 8) as usize;
-                let screen_y = (obj.y as i32 - 16);
+                let screen_y = obj.y as i32 - 16;
                 if screen_x <= line_x && screen_x + 7 >= line_x {
                     let x = line_x - screen_x;
                     let mut sprite_pattern = (if use_8x16 { obj.pattern_num & 0xFE } else { obj.pattern_num }) as usize;
-                    let mut y = cur_line - screen_y;
-                    let sprite_x = (if obj.x_flip { 7 - x } else { x });
+                    let y = cur_line - screen_y;
+                    let sprite_x = if obj.x_flip { 7 - x } else { x };
                     let mut sprite_y = (if obj.y_flip { (height - 1) - y } else { y }) as usize;
 
                     let palette = match obj.pal_num {

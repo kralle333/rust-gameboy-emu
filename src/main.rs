@@ -11,11 +11,13 @@ extern crate serde;
 extern crate serde_json;
 
 use crate::emulator::RunConfig;
-use std::io::Read;
+
 use std::path::Path;
 use sdl2::{event::Event, pixels::Color};
-use serde::{Serialize, Deserialize};
+
 use std::fs::read_to_string;
+
+pub const FRAME_LENGTH: u32 = 70224;
 
 
 pub fn main() {
@@ -27,11 +29,11 @@ pub fn main() {
     let (path_to_rom, config_to_use) = match first_argument.as_str() {
         _ if first_argument.ends_with(".gb") => { (first_argument, RunConfig::default()) }
         _ if first_argument.ends_with(".json") => {
-            let conf:RunConfig = serde_json::from_str(&read_to_string(path_to_arg).unwrap()).unwrap();
+            let conf: RunConfig = serde_json::from_str(&read_to_string(path_to_arg).unwrap()).unwrap();
             let path_to_rom = conf.path_to_rom.to_string();
             (path_to_rom, conf)
         }
-        _ => {panic!("unknown arg given")}
+        _ => { panic!("unknown arg given") }
     };
 
     config_to_use.validate();
@@ -40,10 +42,10 @@ pub fn main() {
     let mut emulator = emulator::Emulator::new(config_to_use);
     emulator.load_rom(&path_to_rom);
 
-    let mut debug_canvas = sdl.get_window_canvas("tiles", 384 * 2, 500);
-
-    debug_canvas.clear();
-    debug_canvas.present();
+    // let mut debug_canvas = sdl.get_window_canvas("tiles", 384 * 2, 500);
+    //
+    // debug_canvas.clear();
+    // debug_canvas.present();
 
     let mut input = input::Input::new();
     let mut canvas = sdl.get_window_canvas(
@@ -53,6 +55,7 @@ pub fn main() {
     );
 
 
+    let mut clock_t: u32 = 0;
     'running: loop {
         let events = sdl.get_events();
         for e in events {
@@ -61,19 +64,22 @@ pub fn main() {
             }
             input.consume_keys(e)
         }
-
-        emulator.tick(&input);
+        let target = clock_t + FRAME_LENGTH;
+        while clock_t < target {
+            emulator.tick(&input);
+            clock_t += emulator.get_last_clock_t() ;
+        }
+        clock_t %=FRAME_LENGTH;
         canvas.set_draw_color(Color::BLACK);
         canvas.clear();
         if emulator.draw(&mut canvas) {
             canvas.present();
         }
-
-        debug_canvas.set_draw_color(Color::BLACK);
-        debug_canvas.clear();
-        if emulator.draw_debug(&mut debug_canvas) {
-            debug_canvas.present();
-        }
+        // debug_canvas.set_draw_color(Color::BLACK);
+        // debug_canvas.clear();
+        // if emulator.draw_debug(&mut debug_canvas) {
+        //     debug_canvas.present();
+        // }
         //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 100000));
     }
 }

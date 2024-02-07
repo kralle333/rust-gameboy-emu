@@ -1198,7 +1198,6 @@ impl Cpu {
                 self.set_a(result);
                 Instruction::Ok(opcode,2, 8, "SET 7, A")
             }
-            op => {panic!("unkown opcode {}",op)}
         }
     }
 }

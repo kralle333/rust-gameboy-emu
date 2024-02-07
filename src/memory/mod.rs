@@ -6,7 +6,7 @@ mod sound;
 
 use std::{fs::File, io::Write, ops::Shl};
 
-use sdl2::render::Canvas;
+use sdl2::render::{Canvas, Texture};
 use sdl2::video::Window;
 
 use crate::{
@@ -14,8 +14,9 @@ use crate::{
     video::{SCREEN_HEIGHT, SCREEN_WIDTH, self},
 };
 
-use self::{gpu::{Gpu},  rom::Rom, sound::Sound};
+use self::{gpu::{Gpu}, rom::Rom, sound::Sound};
 
+#[allow(dead_code)]
 const DIVIDER_ADD: i16 = 16384;
 
 pub trait MemoryType {
@@ -34,6 +35,7 @@ pub trait MemoryType {
     }
 }
 
+#[allow(dead_code)]
 struct DivRegister {
     val: u8,
     added_this_second: u8,
@@ -233,8 +235,11 @@ impl Memory {
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         self.gpu.draw(canvas)
     }
+    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
+        self.gpu.draw_texture(texture)
+    }
     pub fn tick(&mut self, clock_t: u32) {
-        self.update_special_registers();
+        self.update_special_registers(clock_t);
         let interrupts = self.gpu.tick(clock_t);
         if interrupts > 0 {
             //println!("Setting interrupts: {interrupts}");
@@ -248,15 +253,15 @@ impl Memory {
     fn is_bit_set(val: u8, bit: u8) -> bool {
         return (val & (1 << bit)) == (1 << bit);
     }
-    pub fn update_special_registers(&mut self) -> bool {
+    pub fn update_special_registers(&mut self, clock_t: u32) -> bool {
         // joypad
         self.add_to_div(1); // TODO: figure out correct timing
 
+        let clock_m = clock_t/4;
         // timers
         let mut timer_add = 0;
-        if Self::is_bit_set(self.timer_control,2){
-            let config = self.timer_control & 0b11;
-            match config {
+        if Self::is_bit_set(self.timer_control, 2) {
+            match self.timer_control & 0b11 {
                 0x00 => timer_add = 1,  //  4.096 KHz
                 0x01 => timer_add = 64, //  262.144 Khz
                 0x10 => timer_add = 16, //  65.536 KHz

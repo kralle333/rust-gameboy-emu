@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::OpenOptions;
 use sdl2::rect::{Rect};
-use sdl2::render::Canvas;
+use sdl2::render::{Canvas, Texture};
 use sdl2::video::Window;
 use serde::Deserialize;
 
@@ -43,17 +43,6 @@ pub struct RunConfig {
 impl RunConfig {
     pub(crate) fn validate(&self) {
         // panic if not valid
-    }
-}
-
-impl RunConfig {
-    pub fn new(print_cpu: bool, use_stepping: bool, breakpoint_at_pc: u16) -> Self {
-        Self {
-            print_cpu,
-            use_stepping,
-            breakpoint_at_pc,
-            ..Default::default()
-        }
     }
 }
 
@@ -110,6 +99,9 @@ impl Emulator {
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         return self.memory.draw(canvas);
+    }
+    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool{
+        return self.memory.draw_texture(texture);
     }
 
     pub fn draw_debug(&mut self, canvas: &mut Canvas<Window>) -> bool {
@@ -176,14 +168,20 @@ impl Emulator {
 
     fn tick_debug(&mut self) {
         if self.debug_mode == DebugMode::None {
+            let mut should_step = false;
             if self.cpu.has_reached_operation_count(self.config.breakpoint_at_instruction_count) {
-                self.debug_mode = DebugMode::Stepping;
-                self.config.print_cpu = true;
+                should_step= true;
                 println!("Stepping: reached breakpoint instruction count {}",self.config.breakpoint_at_instruction_count);
-            } else if self.cpu.PC() == self.config.breakpoint_at_pc {
+            } else if self.cpu.PC() == self.config.breakpoint_at_pc && self.config.breakpoint_at_pc != 0{
+                should_step= true;
+                println!("Stepping: reached breakpoint PC {}",self.config.breakpoint_at_pc);
+            }
+            if should_step{
                 self.debug_mode = DebugMode::Stepping;
                 self.config.print_cpu = true;
-                println!("Stepping: reached breakpoint PC {}",self.config.breakpoint_at_pc);
+                if self.config.use_doctor{
+                    self.cpu.write_buffered_doctor_lines();
+                }
             }
         }
     }
@@ -199,6 +197,7 @@ impl Emulator {
         }
         if keys.is_new_down(&Button::Step) {
             self.step_one = true;
+            return false;
         }
         if keys.is_new_down(&Button::Continue) && self.debug_mode == DebugMode::Stepping {
             self.debug_mode = DebugMode::Breakpoint(self.config.breakpoint_at_pc);
@@ -224,6 +223,10 @@ impl Emulator {
         true
     }
 
+    pub fn get_last_clock_t(&self) -> u32 {
+        self.cpu.get_clock_t()
+    }
+
     pub fn tick(&mut self, keys: &Input) {
         if !self.check_debug_input(keys) {
             return;
@@ -238,6 +241,9 @@ impl Emulator {
         self.step_one = false;
         if self.config.print_cpu {
             self.cpu.print();
+        }
+        if self.config.use_doctor{
+            self.cpu.write_doctor();
         }
     }
 }

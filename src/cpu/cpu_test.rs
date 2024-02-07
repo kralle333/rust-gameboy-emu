@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(dead_code)]
 mod tests {
     use rand::Rng;
 
@@ -43,6 +44,7 @@ mod tests {
             );
             t
         }
+
         fn run_with_a8(&mut self, opcode: u8, u8: u8) {
             self.mem.write_byte(0xc000, opcode); // 0xc000 = internal_ram
             self.mem.write_byte(0xc001, u8);
@@ -69,6 +71,14 @@ mod tests {
         fn assert_eq_reg16(&self, a: Register16, b: Register16) {
             assert_eq!(self.get_register16(a), self.get_register16(b))
         }
+
+        fn assert_last_op(&self, opcode: u8) {
+            if let Instruction::Ok(last_op, _, _, _) = self.cpu.last_instruction {
+                assert_eq!(last_op, opcode)
+            } else {
+                assert!(false);
+            }
+        }
         fn set_register16(&mut self, reg: Register16, val: u16) {
             match reg {
                 Register16::AF => self.cpu.AF = val,
@@ -89,7 +99,7 @@ mod tests {
                 Register16::PC => self.cpu.PC,
             }
         }
-        fn test_opcode_reg_8(&mut self, opcode: u8, reg: Register) {
+        fn test_opcode_reg_8(&mut self, opcode: u8, _reg: Register) {
             self.mem.write_byte(0x0000, opcode);
             self.mem.write_word(0x0001, 0x1212);
             self.cpu.PC = 0x0000;
@@ -114,7 +124,7 @@ mod tests {
             self.run(opcode);
             self.assert_eq_reg(source, target);
         }
-        fn test_opcode_reg_load_16(&mut self, opcode: u8, target: Register16, source: Register16) {
+        fn test_opcode_reg_load_16(&mut self, _opcode: u8, target: Register16, source: Register16) {
             let rand_value = self.rand.gen_range(0..=0xFFFF);
             self.set_register16(source, rand_value);
             let source = self.get_register16(source);
@@ -174,6 +184,7 @@ mod tests {
         t.assert_eq_flag(Flag::H, true);
         t.assert_eq_flag(Flag::C, false);
     }
+
     #[test]
     fn test_half_carry_inc() {
         let mut t = Tester::new();
@@ -190,7 +201,7 @@ mod tests {
     fn test_half_carry_16_add() {
         let mut t = Tester::new();
         t.cpu.AF = 0;
-        t.cpu.add_16(0x0900,0x0900);
+        t.cpu.add_16(0x0900, 0x0900);
         t.assert_eq_flag(Flag::Z, false);
         t.assert_eq_flag(Flag::N, false);
         t.assert_eq_flag(Flag::H, true);
@@ -198,38 +209,38 @@ mod tests {
     }
 
     #[test]
-    fn test_add_negative(){
+    fn test_add_negative() {
         let mut t = Tester::new();
         let result = t.cpu.add_16(152, -10i16 as u16);
-        assert_eq!(result,142);
+        assert_eq!(result, 142);
     }
 
     #[test]
-    fn test_add_signed_to_sp(){
+    fn test_add_signed_to_sp() {
         let mut t = Tester::new();
-        let result = t.cpu.SP = 153;
-        t.run_with_a8(0xe8,(-50i8) as u8);
-        assert_eq!(t.cpu.SP,103);
-    }
-    #[test]
-    fn test_add_signed_to_sp_set_to_hl(){
-        let mut t = Tester::new();
-        let result = t.cpu.SP = 153;
-        t.run_with_a8(0xf8,(-50i8) as u8);
-        assert_eq!(t.cpu.HL,103);
-        assert_eq!(t.cpu.SP,153);
+        let _result = t.cpu.SP = 153;
+        t.run_with_a8(0xe8, (-50i8) as u8);
+        assert_eq!(t.cpu.SP, 103);
     }
 
     #[test]
-    fn test_push_pop_hl(){
+    fn test_add_signed_to_sp_set_to_hl() {
+        let mut t = Tester::new();
+        let _result = t.cpu.SP = 153;
+        t.run_with_a8(0xf8, (-50i8) as u8);
+        assert_eq!(t.cpu.HL, 103);
+        assert_eq!(t.cpu.SP, 153);
+    }
+
+    #[test]
+    fn test_push_pop_hl() {
         let mut t = Tester::new();
         t.cpu.SP = 0x1234;
         t.run(0xe5);
-        assert_ne!(t.cpu.SP,0x1234);
+        assert_ne!(t.cpu.SP, 0x1234);
         t.run(0xe1);
-        assert_eq!(t.cpu.SP,0x1234);
+        assert_eq!(t.cpu.SP, 0x1234);
     }
-
 
 
     #[test]
@@ -492,14 +503,93 @@ mod tests {
 
         t.cpu.push_sp(&mut t.mem, t.cpu.AF);
 
-        println!("0x{:x}",t.mem.read_byte(t.cpu.SP + 2));
-        println!("0x{:x}",t.mem.read_byte(t.cpu.SP + 1));
-        println!("0x{:x}",t.mem.read_byte(t.cpu.SP ));
+        println!("0x{:x}", t.mem.read_byte(t.cpu.SP + 2));
+        println!("0x{:x}", t.mem.read_byte(t.cpu.SP + 1));
+        println!("0x{:x}", t.mem.read_byte(t.cpu.SP));
 
-        assert_eq!(t.mem.read_byte(t.cpu.SP + 2), t.cpu.get_a());
-        assert_eq!(t.mem.read_byte(t.cpu.SP + 1), t.cpu.get_f());
+        assert_eq!(t.mem.read_byte(t.cpu.SP + 1), t.cpu.get_a());
+        assert_eq!(t.mem.read_byte(t.cpu.SP + 0), t.cpu.get_f());
     }
 
+    #[test]
+    fn test_call_push_pop() {
+        // 0xc000: CALL 0xa000
+        // 0xc003 gets pushed to stack
+        // RETI: return to 0xc003 via SP pop
+
+        let mut t = Tester::new();
+        t.cpu.SP = 0xFFFE;
+        t.mem.write_byte(0xa000, 0xd9); // RETI
+        t.run_with_a16(0xcd, 0xa000);
+
+        assert_eq!(t.cpu.SP, 0xFFFC);
+        assert_eq!(t.cpu.PC, 0xa000);
+
+
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xc003);
+        t.assert_last_op(0xd9);
+    }
+
+    #[test]
+    fn test_sequential_calls(){
+        let mut t = Tester::new();
+        t.cpu.SP = 0xFFFE;
+
+        // jump to 0xa000 and return
+        t.mem.write_byte(0xc000,0xcd);
+        t.mem.write_word(0xc001,0xa000);
+        t.mem.write_byte(0xa000, 0xd9); // RETI
+
+        // jump to 0xa100
+        t.mem.write_byte(0xc003,0xcd);
+        t.mem.write_word(0xc004,0xa100);
+        t.mem.write_byte(0xa100, 0xd9); // RETI
+
+        // jump to 0xa200
+        t.mem.write_byte(0xc006,0xcd);
+        t.mem.write_word(0xc007,0xa200);
+        t.mem.write_byte(0xa200, 0xd9); // RETI
+
+        // jump to 0xa300
+        t.mem.write_byte(0xc009,0xcd);
+        t.mem.write_word(0xc00A,0xa300);
+        t.mem.write_byte(0xa300, 0xd9); // RETI
+
+
+        t.cpu.PC = 0xc000;
+        t.cpu.tick(&mut t.mem);
+
+        assert_eq!(t.cpu.PC, 0xa000);
+        t.assert_last_op(0xcd);
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xc003);
+
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xa100);
+        t.assert_last_op(0xcd);
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xc006);
+
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xa200);
+        t.assert_last_op(0xcd);
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xc009);
+
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xa300);
+        t.assert_last_op(0xcd);
+        t.cpu.tick(&mut t.mem);
+        assert_eq!(t.cpu.PC, 0xc00c);
+
+        assert_eq!(t.cpu.SP, 0xFFFE);
+    }
+
+    #[test]
+    fn test_nested_calls(){
+
+    }
 
     #[test]
     fn test_rst_reti() {
@@ -510,7 +600,7 @@ mod tests {
         assert_eq!(t.cpu.PC(), 0x18);
 
         t.run(0xd9);
-        assert_eq!(t.cpu.PC(), 0xc000);
+        assert_eq!(t.cpu.PC(), 0xc001);
     }
 
     #[test]

@@ -7,7 +7,7 @@ use super::{Cpu, Flag, Instruction, Register};
 impl Cpu {
     pub fn execute(&mut self, opcode: u8, mem: &mut memory::Memory) -> Instruction {
         match opcode {
-            0x00 => Instruction::Ok(opcode, 1, 4, "NOOP"),
+            0x00 => Instruction::Ok(opcode, 1, 4, "NOP"),
             0x01 => {
                 self.BC = self.get_nn(mem);
                 Instruction::Ok(opcode, 3, 12, "LD BC,d16")
@@ -187,11 +187,12 @@ impl Cpu {
                 }
 
                 if self.get_flag(Flag::N) {
-                    value -= correction;
+                    value = value.wrapping_sub(correction);
                 } else {
-                    value += correction;
+                    value = value.wrapping_add(correction);
                 }
                 self.set_flag(Flag::Z, value == 0);
+                self.set_flag(Flag::H, false);
                 self.set_a(value);
                 Instruction::Ok(opcode, 1, 1, "DAA")
             }
@@ -262,7 +263,7 @@ impl Cpu {
                 let val = mem.read_byte(self.HL);
                 let result = self.dec_8(val);
                 mem.write_byte(self.HL, result);
-                Instruction::Ok(opcode, 2, 12, "DEC (HL)")
+                Instruction::Ok(opcode, 1, 12, "DEC (HL)")
             }
             0x36 => {
                 let val = self.get_n(mem);
@@ -867,13 +868,13 @@ impl Cpu {
             0xc8 => {
                 if self.get_flag(Flag::Z) {
                     self.ret(mem);
-                    return Instruction::Ok(opcode, 1, 20, "RET Z");
+                    return Instruction::Ok(opcode, 0, 20, "RET Z");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET Z")
             }
             0xc9 => {
                 self.ret(mem);
-                return Instruction::Ok(opcode, 1, 4, "RET");
+                return Instruction::Ok(opcode, 0, 4, "RET");
             }
             0xca => {
                 if self.get_flag(Flag::Z) {
@@ -888,7 +889,7 @@ impl Cpu {
                     self.call_a16(mem);
                     return Instruction::Ok(opcode, 0, 24, "CALL Z, a16");
                 }
-                Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
+                Instruction::Ok(opcode, 3, 12, "CALL Z, a16")
             }
             0xcd => {
                 self.call_a16(mem);
@@ -905,7 +906,7 @@ impl Cpu {
             0xd0 => {
                 if !self.get_flag(Flag::C) {
                     self.ret(mem);
-                    return Instruction::Ok(opcode, 1, 20, "RET NC");
+                    return Instruction::Ok(opcode, 0, 20, "RET NC");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET NC")
             }
@@ -922,11 +923,11 @@ impl Cpu {
             }
             0xd3 => Instruction::Invalid(opcode),
             0xd4 => {
-                if !self.get_flag(Flag::Z) {
+                if !self.get_flag(Flag::C) {
                     self.call_a16(mem);
-                    return Instruction::Ok(opcode, 0, 24, "CALL NZ, a16");
+                    return Instruction::Ok(opcode, 0, 24, "CALL NC, a16");
                 }
-                Instruction::Ok(opcode, 3, 12, "CALL NZ, a16")
+                Instruction::Ok(opcode, 3, 12, "CALL NC, a16")
             }
             0xd5 => {
                 self.push_sp(mem, self.DE);
@@ -943,14 +944,14 @@ impl Cpu {
             0xd8 => {
                 if self.get_flag(Flag::C) {
                     self.ret(mem);
-                    return Instruction::Ok(opcode, 1, 20, "RET C");
+                    return Instruction::Ok(opcode, 0, 20, "RET C");
                 }
                 Instruction::Ok(opcode, 1, 8, "RET C")
             }
             0xd9 => {
                 self.ret(mem);
                 self.IME = true;
-                Instruction::Ok(opcode, 1, 16, "RETI")
+                Instruction::Ok(opcode, 0, 16, "RETI")
             }
             0xda => {
                 if self.get_flag(Flag::C) {
@@ -968,7 +969,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 3, 12, "CALL C, a16")
             }
             0xdd => {
-                panic!("invalid opcode {}",opcode);
+                panic!("invalid opcode {}", opcode);
             }
             0xde => {
                 self.sbc_a(self.get_n(mem));
@@ -1036,6 +1037,7 @@ impl Cpu {
             }
             0xf1 => {
                 self.AF = self.pop_sp(mem);
+                self.set_f(self.get_f() & 0xF0);
                 Instruction::Ok(opcode, 1, 12, "POP AF")
             }
             0xf2 => {
@@ -1043,7 +1045,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 2, 8, "LD A, (C)")
             }
             0xf3 => {
-                self.DI = true;
+                self.disable_IME_at_operation = self.operations + 2;
                 Instruction::Ok(opcode, 1, 4, "DI")
             }
             0xf4 => Instruction::Invalid(opcode),
@@ -1076,7 +1078,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 3, 16, "LD A,(a16)")
             }
             0xfb => {
-                self.EI = true;
+                self.enable_IME_at_operation = self.operations + 2;
                 Instruction::Ok(opcode, 1, 4, "EI")
             }
             0xfc => Instruction::Invalid(opcode),
