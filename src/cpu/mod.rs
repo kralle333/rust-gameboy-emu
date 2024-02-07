@@ -14,7 +14,7 @@ use crate::memory::{self, MemoryType};
 pub enum Instruction {
     #[default]
     None,
-    Ok(u8, u16, u32, &'static str),
+    Ok(u8, u16, u8, &'static str),
     Invalid(u8),
 }
 
@@ -35,7 +35,7 @@ pub struct Cpu {
     enable_IME_at_operation: u128,
     disable_IME_at_operation: u128,
     clock_m: u8,
-    clock_t: u32,
+    clock_t: u8,
 
     triggered_interruption: String,
     last_instruction: Instruction,
@@ -148,7 +148,7 @@ impl Cpu {
             }
         }
     }
-    pub fn get_clock_t(&self) -> u32 {
+    pub fn get_clock_t(&self) -> u8 {
         self.clock_t
     }
 
@@ -259,7 +259,7 @@ impl Cpu {
         (self.AF & flag) == flag
     }
 
-    fn set_clocks(&mut self, m: u8, t: u32) {
+    fn set_clocks(&mut self, m: u8, t: u8) {
         self.clock_m = m;
         self.clock_t = t;
     }

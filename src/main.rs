@@ -67,9 +67,9 @@ pub fn main() {
         let target = clock_t + FRAME_LENGTH;
         while clock_t < target {
             emulator.tick(&input);
-            clock_t += emulator.get_last_clock_t() ;
+            clock_t += emulator.get_last_clock_t() as u32;
         }
-        clock_t %=FRAME_LENGTH;
+        clock_t %= FRAME_LENGTH;
         canvas.set_draw_color(Color::BLACK);
         canvas.clear();
         if emulator.draw(&mut canvas) {

@@ -223,7 +223,7 @@ impl Emulator {
         true
     }
 
-    pub fn get_last_clock_t(&self) -> u32 {
+    pub fn get_last_clock_t(&self) -> u8 {
         self.cpu.get_clock_t()
     }
 

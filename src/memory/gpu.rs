@@ -392,9 +392,9 @@ impl Gpu {
         return false;
     }
 
-    pub fn tick(&mut self, clock_t: u32) -> u8 {
+    pub fn tick(&mut self, clock_t: u8) -> u8 {
         let mut interrupts: u8 = 0;
-        self.clock += clock_t;
+        self.clock += clock_t as u32;
 
         match self.mode() {
             //OAM read

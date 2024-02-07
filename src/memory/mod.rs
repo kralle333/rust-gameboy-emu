@@ -16,8 +16,7 @@ use crate::{
 
 use self::{gpu::{Gpu}, rom::Rom, sound::Sound};
 
-#[allow(dead_code)]
-const DIVIDER_ADD: i16 = 16384;
+const CLOCK_SPEED: u32 = 4194304;
 
 pub trait MemoryType {
     fn read_byte(&self, addr: u16) -> u8;
@@ -35,12 +34,6 @@ pub trait MemoryType {
     }
 }
 
-#[allow(dead_code)]
-struct DivRegister {
-    val: u8,
-    added_this_second: u8,
-    time_since_last_check: u16,
-}
 
 pub struct Memory {
     rom: Rom,
@@ -59,13 +52,16 @@ pub struct Memory {
     //FF02
     serial_transfer_control: u8,
     //FF04
-    div_register: DivRegister,
+    div_register: u8,
     //FF05
     timer_counter: u8,
     //FF06
     timer_modulo: u8,
     //FF07
     timer_control: u8,
+
+    // Used to increment FF05 at FF06 frequency
+    timer_value: u32,
 }
 
 impl MemoryType for Memory {
@@ -88,7 +84,7 @@ impl MemoryType for Memory {
             0xff00 => self.joypad,
             0xff01 => self.serial_transfer_data,
             0xff02 => self.serial_transfer_control,
-            0xff04 => self.div_register.val,
+            0xff04 => self.div_register,
             0xff05 => self.timer_counter,
             0xff06 => self.timer_modulo,
             0xff07 => self.timer_control,
@@ -136,7 +132,7 @@ impl MemoryType for Memory {
                     self.serial_transfer_control = 0;
                 }
             }
-            0xff04 => self.div_register.val = 0,
+            0xff04 => self.div_register = 0,
             0xff05 => self.timer_counter = val,
             0xff06 => self.timer_modulo = val,
             0xff07 => self.timer_control = val,
@@ -181,14 +177,11 @@ impl Memory {
             joypad: 0,
             serial_transfer_data: 0,
             serial_transfer_control: 0,
-            div_register: DivRegister {
-                val: 0,
-                added_this_second: 0,
-                time_since_last_check: 0,
-            },
+            div_register: 0,
             timer_counter: 0,
             timer_modulo: 0,
             timer_control: 0,
+            timer_value: 0,
         };
         mem.reset();
         mem
@@ -238,8 +231,8 @@ impl Memory {
     pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
         self.gpu.draw_texture(texture)
     }
-    pub fn tick(&mut self, clock_t: u32) {
-        self.update_special_registers(clock_t);
+    pub fn tick(&mut self, clock_t: u8) {
+        self.update_timers(clock_t);
         let interrupts = self.gpu.tick(clock_t);
         if interrupts > 0 {
             //println!("Setting interrupts: {interrupts}");
@@ -248,36 +241,40 @@ impl Memory {
     }
 
     fn add_to_div(&mut self, amount: u8) {
-        self.div_register.val = self.div_register.val.wrapping_add(amount);
+        let (new_value, div_overflow) = self.div_register.overflowing_add(amount);
+        if div_overflow {
+            self.div_register = 0;
+            let prev = self.read_byte(0xFF04);
+            self.write_byte(0xFF04, prev.wrapping_add(1));
+        } else {
+            self.div_register = new_value;
+        }
     }
     fn is_bit_set(val: u8, bit: u8) -> bool {
         return (val & (1 << bit)) == (1 << bit);
     }
-    pub fn update_special_registers(&mut self, clock_t: u32) -> bool {
-        // joypad
-        self.add_to_div(1); // TODO: figure out correct timing
+    pub fn update_timers(&mut self, clock_t: u8) {
+        self.add_to_div(clock_t);
 
-        let clock_m = clock_t/4;
-        // timers
-        let mut timer_add = 0;
         if Self::is_bit_set(self.timer_control, 2) {
-            match self.timer_control & 0b11 {
-                0x00 => timer_add = 1,  //  4.096 KHz
-                0x01 => timer_add = 64, //  262.144 Khz
-                0x10 => timer_add = 16, //  65.536 KHz
-                0x11 => timer_add = 4,  //  16.384 KHz
+            self.timer_value += clock_t as u32;
+            let timer_threshold = match self.timer_control & 0b11 {
+                0b00 => CLOCK_SPEED / 4096,  //  4.096 KHz
+                0b01 => CLOCK_SPEED / 262144, //  262.144 Khz
+                0b10 => CLOCK_SPEED / 65536, //  65.536 KHz
+                0b11 => CLOCK_SPEED / 16384,  //  16.384 KHz
                 _ => panic!(),
+            };
+            if self.timer_value >= timer_threshold {
+                self.timer_value = 0;
+                if self.timer_counter == 255 {
+                    self.timer_counter = self.timer_modulo;
+                    self.interupt_flag |= 1 << 2;
+                } else {
+                    self.timer_counter += 1;
+                }
             }
-        }
-        let (new_val, overflow) = self.timer_counter.overflowing_add(timer_add);
-        if overflow {
-            self.timer_counter = self.timer_modulo;
-            self.interupt_flag |= 1 << 2;
-        } else {
-            self.timer_counter = new_val;
-        }
-
-        return overflow;
+        };
     }
 
     fn color_to_char(color: &video::GBColor) -> String {
