@@ -36,10 +36,10 @@ impl Cpu {
     pub fn adc_a(&mut self, b: u8) {
         let before_a = self.get_a();
         let carry_val = self.get_flag(Flag::C) as u8;
+        
+        let half_carry = ((before_a & 0x0F) + (b & 0x0F) + (carry_val & 0x0F)) > 0xF;
 
-        let half_carry = Self::is_half_carry_add(before_a, b) || Self::is_half_carry_add(before_a, (b & 0x0F) + carry_val as u8);
-
-        let result = before_a.wrapping_add(b).wrapping_add(carry_val as u8);
+        let result = before_a.wrapping_add(b).wrapping_add(carry_val);
 
         let carry = before_a.checked_add(b).is_none() ||
             b.checked_add(carry_val).is_none() ||
@@ -188,7 +188,7 @@ impl Cpu {
 
     pub fn ret(&mut self, mem: &mut Memory) {
         self.PC = self.pop_sp(mem);
-        if self.in_interrupt{
+        if self.in_interrupt {
             self.in_interrupt = false;
         }
     }

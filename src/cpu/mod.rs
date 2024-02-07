@@ -320,6 +320,7 @@ impl Cpu {
             self.triggered_interruption = interrupt_name.to_string();
             mem.write_byte(0xFF0F, interrupt_flag & !interrupt);
             self.rst(mem, reset_address);
+            self.set_clocks(0,4);
             self.IME = false;
             self.in_interrupt = true;
             return;

@@ -2,7 +2,6 @@
 #[allow(dead_code)]
 mod tests {
     use rand::Rng;
-
     use crate::{
         cartridge::Cartridge,
         cpu::{self, Cpu, Flag, Instruction, Register},
@@ -311,6 +310,19 @@ mod tests {
         }
         assert_eq!(c.get_a(), 0b00010001);
         assert_eq!(c.get_flag(Flag::C), true);
+    }
+
+    #[test]
+    fn test_adc_a(){
+        let mut t = Tester::new();
+
+        t.cpu.AF = 0x0010;
+        t.run_with_a8(0xCE,0x0F);
+
+        t.assert_eq_flag(Flag::C,false);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,false);
+        t.assert_eq_flag(Flag::Z,false);
     }
 
     #[test]
