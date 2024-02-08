@@ -28,8 +28,10 @@ pub struct Cpu {
     SP: u16,
     PC: u16,
 
-    IME: bool,
+    pub IME: bool,
     HALT: bool,
+    entered_halt_without_IME: bool,
+    HALT_bug_at_operation: u128,
 
     in_interrupt: bool,
     enable_IME_at_operation: u128,
@@ -43,6 +45,7 @@ pub struct Cpu {
     operations: u128,
     doctor_buffer: Vec<String>,
 }
+
 
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
@@ -120,11 +123,7 @@ impl Cpu {
                 println!("invalid opcode! {opcode:#06x}");
             }
         }
-        if !self.triggered_interruption.is_empty() {
-            println!("Interrupt triggered: {}", self.triggered_interruption);
-        }
     }
-
     pub fn write_buffered_doctor_lines(&mut self) {
         let mut log_file = OpenOptions::new()
             .write(true)
@@ -259,10 +258,13 @@ impl Cpu {
         (self.AF & flag) == flag
     }
 
-    fn set_clocks(&mut self, m: u8, t: u8) {
-        self.clock_m = m;
-        self.clock_t = t;
+    fn add_clock(&mut self, t: u8) {
+        self.clock_t += t;
     }
+    pub fn reset_clock(&mut self) {
+        self.clock_t = 0;
+    }
+
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         self.check_interrupt_status(mem);
@@ -278,8 +280,12 @@ impl Cpu {
         match self.last_instruction {
             Instruction::None => {}
             Instruction::Ok(_, length, clocks, _) => {
-                self.set_clocks(0, clocks);
-                self.PC = self.PC.wrapping_add(length);
+                self.add_clock(clocks);
+                if self.operations == self.HALT_bug_at_operation {
+                    self.HALT_bug_at_operation = 0;
+                } else {
+                    self.PC = self.PC.wrapping_add(length);
+                }
             }
             Instruction::Invalid(opcode) => println!("invalid opcode {}", Self::clean_hex_8(opcode)),
         }
@@ -288,6 +294,19 @@ impl Cpu {
 
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory) {
         self.triggered_interruption = "".to_string();
+
+        let enabled_interrupts = mem.read_byte(0xFFFF);
+        let triggered_interrupts = mem.read_byte(0xFF0F);
+
+        let to_fire = enabled_interrupts & triggered_interrupts;
+
+        if self.HALT && self.entered_halt_without_IME {
+            if to_fire != 0 {
+                self.HALT = false;
+                return;
+            } else { // HALT bug
+            }
+        }
 
         //Go through the five different interrupts and see if any is triggered
         if self.disable_IME_at_operation == self.operations {
@@ -302,27 +321,24 @@ impl Cpu {
             return;
         }
 
-        let enabled_interrupts = mem.read_byte(0xFFFF);
-        let interrupt_flag = mem.read_byte(0xFF0F);
-
-        let to_fire = enabled_interrupts & interrupt_flag;
-
         for (interrupt, reset_address, interrupt_name) in [
             (0b00001, 0x40, "LCD vertical blanking impulse"),
             (0b00010, 0x48, "LY=LYC"),
             (0b00100, 0x50, "Timer overflow"),
             (0b01000, 0x58, "End of serial I/O transfer"),
             (0b10000, 0x60, "Transition High->Low on pins P10-P13")] {
-            if (interrupt_flag & to_fire) == 0 {
+            if (interrupt & to_fire) == 0 {
                 continue;
             }
 
             self.triggered_interruption = interrupt_name.to_string();
-            mem.write_byte(0xFF0F, interrupt_flag & !interrupt);
-            self.rst(mem, reset_address);
-            self.set_clocks(0,4);
+            mem.write_byte(0xFF0F, triggered_interrupts & !interrupt);
+            self.rst_interrupt(mem, reset_address);
             self.IME = false;
             self.in_interrupt = true;
+            if !self.triggered_interruption.is_empty() {
+                println!("Interrupt triggered: {}", self.triggered_interruption);
+            }
             return;
         }
     }

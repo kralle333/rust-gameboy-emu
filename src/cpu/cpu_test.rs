@@ -323,8 +323,61 @@ mod tests {
         t.assert_eq_flag(Flag::H,true);
         t.assert_eq_flag(Flag::N,false);
         t.assert_eq_flag(Flag::Z,false);
-    }
 
+        t.cpu.AF = 0xFF10;
+        t.run_with_a8(0xCE,0x00);
+
+        t.assert_eq_flag(Flag::C,true);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,false);
+        t.assert_eq_flag(Flag::Z,true);
+    }
+    #[test]
+    fn test_sbc_a(){
+        let mut t = Tester::new();
+
+        t.cpu.AF = 0x0000;
+        t.run_with_a8(0xDE,0x01);
+
+        assert_eq!(t.cpu.get_a(),0xFF);
+        t.assert_eq_flag(Flag::C,true);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,true);
+        t.assert_eq_flag(Flag::Z,false);
+
+        t.cpu.AF = 0x0010;
+        t.run_with_a8(0xDE,0x0F);
+        assert_eq!(t.cpu.get_a(),0xF0);
+        t.assert_eq_flag(Flag::C,true);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,true);
+        t.assert_eq_flag(Flag::Z,false);
+
+        t.cpu.AF = 0x0F10;
+        t.run_with_a8(0xDE,0x0F);
+        assert_eq!(t.cpu.get_a(),0xFF);
+        t.assert_eq_flag(Flag::C,true);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,true);
+        t.assert_eq_flag(Flag::Z,false);
+
+        t.cpu.AF = 0x0010;
+        t.run_with_a8(0xDE,0x10);
+        assert_eq!(t.cpu.get_a(),0xEF);
+        t.assert_eq_flag(Flag::C,true);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,true);
+        t.assert_eq_flag(Flag::Z,false);
+
+        t.cpu.AF = 0x0F10;
+        t.run_with_a8(0xDE,0x1F);
+        assert_eq!(t.cpu.get_a(),0xEF);
+        t.assert_eq_flag(Flag::C,true);
+        t.assert_eq_flag(Flag::H,true);
+        t.assert_eq_flag(Flag::N,true);
+        t.assert_eq_flag(Flag::Z,false);
+
+    }
     #[test]
     fn test_rra() {
         let mut m = memory::Memory::new();

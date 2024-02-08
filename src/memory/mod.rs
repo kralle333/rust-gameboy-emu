@@ -108,7 +108,7 @@ impl MemoryType for Memory {
         match addr {
             0x0000..=0x7fff => self.rom.write_byte(addr, val),
             0x8000..=0x9fff => {
-                if addr == 0xff40 { // DMA transfer
+                if addr == 0xff46 { // DMA transfer
                     let start = (val as u16) << 8;
                     for i in 0..140u16 {
                         let from_addr = start + i;
@@ -122,7 +122,9 @@ impl MemoryType for Memory {
             0xa000..=0xfdff => self.rom.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
             0xfea0..=0xfeff => {}
-            0xff00 => self.joypad = val,
+            0xff00 => {
+                //self.joypad = val
+            },
             0xff01 => self.serial_transfer_data = val,
             0xff02 => {
                 self.serial_transfer_control = val;
@@ -191,7 +193,8 @@ impl Memory {
         self.rom.load(&data, cartridge_info);
     }
     pub fn reset(&mut self) {
-        self.write_byte(0xFF00, 0x0F); //0x0F no buttons pressed
+        self.joypad = 0xFF;
+        self.write_byte(0xFF00, 0xFF); //0x0F no buttons pressed
         self.write_byte(0xFF05, 0x00); //TIMA
         self.write_byte(0xFF06, 0x00); //TMA
         self.write_byte(0xFF07, 0x00); //TAC
@@ -235,7 +238,6 @@ impl Memory {
         self.update_timers(clock_t);
         let interrupts = self.gpu.tick(clock_t);
         if interrupts > 0 {
-            //println!("Setting interrupts: {interrupts}");
             self.interupt_flag |= interrupts;
         }
     }
@@ -265,13 +267,15 @@ impl Memory {
                 0b11 => CLOCK_SPEED / 16384,  //  16.384 KHz
                 _ => panic!(),
             };
-            if self.timer_value >= timer_threshold {
-                self.timer_value = 0;
-                if self.timer_counter == 255 {
-                    self.timer_counter = self.timer_modulo;
+            while self.timer_value >= timer_threshold {
+                self.timer_value -=timer_threshold;
+                let (counter, overflow) = match self.timer_counter.checked_add(1) {
+                    Some(counter) => (counter, false),
+                    None => (self.timer_modulo, true),
+                };
+                self.timer_counter = counter;
+                if overflow{
                     self.interupt_flag |= 1 << 2;
-                } else {
-                    self.timer_counter += 1;
                 }
             }
         };

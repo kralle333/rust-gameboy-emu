@@ -35,6 +35,7 @@ impl Cpu {
             0x07 => {
                 let val = self.get_a();
                 self.set_a(val.rotate_left(1));
+                self.reset_all_flags();
                 self.set_flag(Flag::C, (0x80 & val) != 0);
                 Instruction::Ok(opcode, 1, 4, "RLCA")
             }
@@ -108,7 +109,7 @@ impl Cpu {
             }
             0x18 => {
                 self.jump_relative(self.get_n(mem) as i8);
-                Instruction::Ok(opcode, 0, 3, "JR r8")
+                Instruction::Ok(opcode, 0, 12, "JR r8")
             }
             0x19 => {
                 self.HL = self.add_16(self.HL, self.DE);
@@ -144,9 +145,9 @@ impl Cpu {
             }
             0x20 => {
                 if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::Z, false) {
-                    return Instruction::Ok(opcode, 0, 3, "JR NZ,r8");
+                    return Instruction::Ok(opcode, 0, 12, "JR NZ,r8");
                 }
-                Instruction::Ok(opcode, 2, 2, "JR NZ,r8")
+                Instruction::Ok(opcode, 2, 8, "JR NZ,r8")
             }
             0x21 => {
                 self.HL = self.get_nn(mem);
@@ -198,9 +199,9 @@ impl Cpu {
             }
             0x28 => {
                 if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::Z, true) {
-                    return Instruction::Ok(opcode, 0, 3, "JR Z,r8");
+                    return Instruction::Ok(opcode, 0, 12, "JR Z,r8");
                 }
-                Instruction::Ok(opcode, 2, 2, "JR Z,r8")
+                Instruction::Ok(opcode, 2, 8, "JR Z,r8")
             }
             0x29 => {
                 self.HL = self.add_16(self.HL, self.HL);
@@ -257,7 +258,7 @@ impl Cpu {
                 let val = mem.read_byte(self.HL);
                 let result = self.inc_8(val);
                 mem.write_byte(self.HL, result);
-                Instruction::Ok(opcode, 2, 12, "INC (HL)")
+                Instruction::Ok(opcode, 1, 12, "INC (HL)")
             }
             0x35 => {
                 let val = mem.read_byte(self.HL);
@@ -271,6 +272,8 @@ impl Cpu {
                 Instruction::Ok(opcode, 2, 12, "LD (HL),d8")
             }
             0x37 => {
+                self.set_flag(Flag::N, false);
+                self.set_flag(Flag::H, false);
                 self.set_flag(Flag::C, true);
                 Instruction::Ok(opcode, 1, 4, "SCF")
             }
@@ -528,7 +531,17 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD (HL), L")
             }
             0x76 => {
-                self.HALT = true;
+                let enabled_interrupts = mem.read_byte(0xFFFF);
+                let triggered_interrupts = mem.read_byte(0xFF0F);
+
+                let to_fire = enabled_interrupts & triggered_interrupts;
+                if self.IME && to_fire == 0 {
+                    // HALT bug
+                    self.HALT_bug_at_operation = self.operations+2;
+                } else {
+                    self.HALT = true;
+                    self.entered_halt_without_IME = !self.IME;
+                }
                 Instruction::Ok(opcode, 1, 4, "HALT")
             }
             0x77 => {
@@ -601,35 +614,35 @@ impl Cpu {
             }
             0x88 => {
                 self.adc_a(self.get_b());
-                Instruction::Ok(opcode, 1, 4, "ADD A, B")
+                Instruction::Ok(opcode, 1, 4, "ADC A, B")
             }
             0x89 => {
                 self.adc_a(self.get_c());
-                Instruction::Ok(opcode, 1, 4, "ADD A, C")
+                Instruction::Ok(opcode, 1, 4, "ADC A, C")
             }
             0x8a => {
                 self.adc_a(self.get_d());
-                Instruction::Ok(opcode, 1, 4, "ADD A, D")
+                Instruction::Ok(opcode, 1, 4, "ADC A, D")
             }
             0x8b => {
                 self.adc_a(self.get_e());
-                Instruction::Ok(opcode, 1, 4, "ADD A, E")
+                Instruction::Ok(opcode, 1, 4, "ADC A, E")
             }
             0x8c => {
                 self.adc_a(self.get_h());
-                Instruction::Ok(opcode, 1, 4, "ADD A, H")
+                Instruction::Ok(opcode, 1, 4, "ADC A, H")
             }
             0x8d => {
                 self.adc_a(self.get_l());
-                Instruction::Ok(opcode, 1, 4, "ADD A, L")
+                Instruction::Ok(opcode, 1, 4, "ADC A, L")
             }
             0x8e => {
                 self.adc_a(mem.read_byte(self.HL));
-                Instruction::Ok(opcode, 1, 8, "ADD A, (HL)")
+                Instruction::Ok(opcode, 1, 8, "ADC A, (HL)")
             }
             0x8f => {
                 self.adc_a(self.get_a());
-                Instruction::Ok(opcode, 1, 4, "ADD A, A")
+                Instruction::Ok(opcode, 1, 4, "ADC A, A")
             }
             0x90 => {
                 self.sub_a(self.get_b());
@@ -855,11 +868,11 @@ impl Cpu {
             }
             0xc5 => {
                 self.push_sp(mem, self.BC);
-                Instruction::Ok(opcode, 1, 4, "PUSH BC")
+                Instruction::Ok(opcode, 1, 16, "PUSH BC")
             }
             0xc6 => {
                 self.add_a(self.get_n(mem));
-                Instruction::Ok(opcode, 2, 2, "ADD, d8")
+                Instruction::Ok(opcode, 2, 8, "ADD, d8")
             }
             0xc7 => {
                 self.rst(mem, 0x00);
@@ -897,7 +910,7 @@ impl Cpu {
             }
             0xce => {
                 self.adc_a(self.get_n(mem));
-                Instruction::Ok(opcode, 2, 2, "ADC A, d8")
+                Instruction::Ok(opcode, 2, 8, "ADC A, d8")
             }
             0xcf => {
                 self.rst(mem, 0x08);
@@ -931,11 +944,11 @@ impl Cpu {
             }
             0xd5 => {
                 self.push_sp(mem, self.DE);
-                Instruction::Ok(opcode, 1, 4, "PUSH DE")
+                Instruction::Ok(opcode, 1, 16, "PUSH DE")
             }
             0xd6 => {
                 self.sub_a(self.get_n(mem));
-                Instruction::Ok(opcode, 2, 2, "SUB d8")
+                Instruction::Ok(opcode, 2, 8, "SUB d8")
             }
             0xd7 => {
                 self.rst(mem, 0x10);
@@ -950,7 +963,7 @@ impl Cpu {
             }
             0xd9 => {
                 self.ret(mem);
-                self.IME = true;
+                self.enable_IME_at_operation = self.operations + 2;
                 Instruction::Ok(opcode, 0, 16, "RETI")
             }
             0xda => {
@@ -973,7 +986,7 @@ impl Cpu {
             }
             0xde => {
                 self.sbc_a(self.get_n(mem));
-                Instruction::Ok(opcode, 2, 2, "SBC A, d8")
+                Instruction::Ok(opcode, 2, 8, "SBC A, d8")
             }
             0xdf => {
                 self.rst(mem, 0x18);
@@ -996,11 +1009,11 @@ impl Cpu {
             0xe4 => Instruction::Invalid(opcode),
             0xe5 => {
                 self.push_sp(mem, self.HL);
-                Instruction::Ok(opcode, 1, 4, "PUSH HL")
+                Instruction::Ok(opcode, 1, 16, "PUSH HL")
             }
             0xe6 => {
                 self.and_a(self.get_n(mem));
-                Instruction::Ok(opcode, 2, 2, "AND d8")
+                Instruction::Ok(opcode, 2, 8, "AND d8")
             }
             0xe7 => {
                 self.rst(mem, 0x20);
@@ -1024,7 +1037,7 @@ impl Cpu {
             0xed => Instruction::Invalid(opcode),
             0xee => {
                 self.xor_a(self.get_n(mem));
-                Instruction::Ok(opcode, 2, 2, "XOR d8")
+                Instruction::Ok(opcode, 2, 8, "XOR d8")
             }
             0xef => {
                 self.rst(mem, 0x28);
@@ -1046,7 +1059,7 @@ impl Cpu {
             }
             0xf3 => {
                 self.disable_IME_at_operation = self.operations + 2;
-                Instruction::Ok(opcode, 1, 4, "DI")
+                Instruction::Ok(opcode, 1, 1, "DI")
             }
             0xf4 => Instruction::Invalid(opcode),
             0xf5 => {
@@ -1079,7 +1092,7 @@ impl Cpu {
             }
             0xfb => {
                 self.enable_IME_at_operation = self.operations + 2;
-                Instruction::Ok(opcode, 1, 4, "EI")
+                Instruction::Ok(opcode, 1, 1, "EI")
             }
             0xfc => Instruction::Invalid(opcode),
             0xfd => Instruction::Invalid(opcode),

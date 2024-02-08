@@ -8,15 +8,14 @@ use serde::Deserialize;
 use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
 use crate::input::{Button, Input};
-use crate::memory::{Memory};
+use crate::memory::{Memory, MemoryType};
 use crate::video;
 use crate::video::GBColor;
 
 #[derive(PartialEq)]
 enum DebugMode {
     None,
-    Stepping,
-    Breakpoint(u16),
+    Stepping
 }
 
 pub struct Emulator {
@@ -36,7 +35,8 @@ pub struct RunConfig {
     use_doctor: bool,
     breakpoint_at_pc: u16,
     breakpoint_at_instruction_count: u128,
-    print_cpu: bool,
+    pub(crate) print_cpu: bool,
+    print_interrupts: bool,
     use_stepping: bool,
 }
 
@@ -48,8 +48,7 @@ impl RunConfig {
 
 impl Emulator {
     pub(crate) fn new(config: RunConfig) -> Emulator {
-        let mode = Self::get_initial_debug_mode(&config);
-        if config.use_doctor{
+        if config.use_doctor {
             OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -61,19 +60,10 @@ impl Emulator {
             cpu: Cpu::new(),
             memory: Memory::new(),
             config,
-            debug_mode: mode,
+            debug_mode: DebugMode::None,
             loaded_rom: "".to_string(),
             step_one: false,
             draw_tiles: false,
-        }
-    }
-    fn get_initial_debug_mode(config: &RunConfig) -> DebugMode {
-        if config.breakpoint_at_pc != 0 {
-            DebugMode::Breakpoint(config.breakpoint_at_pc)
-        } else if config.use_stepping {
-            DebugMode::Stepping
-        } else {
-            DebugMode::None
         }
     }
     pub fn load_rom(&mut self, file_path: &String) {
@@ -100,7 +90,7 @@ impl Emulator {
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         return self.memory.draw(canvas);
     }
-    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool{
+    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
         return self.memory.draw_texture(texture);
     }
 
@@ -170,16 +160,16 @@ impl Emulator {
         if self.debug_mode == DebugMode::None {
             let mut should_step = false;
             if self.cpu.has_reached_operation_count(self.config.breakpoint_at_instruction_count) {
-                should_step= true;
-                println!("Stepping: reached breakpoint instruction count {}",self.config.breakpoint_at_instruction_count);
-            } else if self.cpu.PC() == self.config.breakpoint_at_pc && self.config.breakpoint_at_pc != 0{
-                should_step= true;
-                println!("Stepping: reached breakpoint PC {}",self.config.breakpoint_at_pc);
+                should_step = true;
+                println!("Stepping: reached breakpoint instruction count {}", self.config.breakpoint_at_instruction_count);
+            } else if self.cpu.PC() == self.config.breakpoint_at_pc && self.config.breakpoint_at_pc != 0 {
+                should_step = true;
+                println!("Stepping: reached breakpoint PC {}", self.config.breakpoint_at_pc);
             }
-            if should_step{
+            if should_step {
                 self.debug_mode = DebugMode::Stepping;
                 self.config.print_cpu = true;
-                if self.config.use_doctor{
+                if self.config.use_doctor {
                     self.cpu.write_buffered_doctor_lines();
                 }
             }
@@ -200,7 +190,7 @@ impl Emulator {
             return false;
         }
         if keys.is_new_down(&Button::Continue) && self.debug_mode == DebugMode::Stepping {
-            self.debug_mode = DebugMode::Breakpoint(self.config.breakpoint_at_pc);
+            self.debug_mode = DebugMode::None;
             self.step_one = false;
         }
         if keys.is_down(&Button::ToggleStepping) {
@@ -232,17 +222,23 @@ impl Emulator {
             return;
         }
         self.tick_debug();
-        if self.debug_mode == DebugMode::Stepping && !self.step_one{
+        if self.debug_mode == DebugMode::Stepping && !self.step_one {
             return;
         }
 
         self.cpu.tick(&mut self.memory);
         self.memory.tick(self.cpu.get_clock_t());
+        self.cpu.reset_clock();
         self.step_one = false;
         if self.config.print_cpu {
             self.cpu.print();
         }
-        if self.config.use_doctor{
+        if self.config.print_interrupts {
+            print!("IME: {} IF: {:#04b} IE: {:#04b} ", self.cpu.IME, self.memory.read_byte(0xff0f), self.memory.read_byte(0xffff));
+            let tac = self.memory.read_byte(0xff07);
+            println!("TIMA: {} TMA: {} TimerEnabled: {} ClockSelect: {:#04b}", self.memory.read_byte(0xff05), self.memory.read_byte(0xff06), tac & 4 == 4, tac & 0b11);
+        }
+        if self.config.use_doctor {
             self.cpu.write_doctor();
         }
     }

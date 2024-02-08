@@ -17,8 +17,14 @@ use sdl2::{event::Event, pixels::Color};
 
 use std::fs::read_to_string;
 
-pub const FRAME_LENGTH: u32 = 70224;
+pub const FRAME_LENGTH: u32 = 69905;
 
+fn arg_to_bool(arg: &str) -> bool {
+    match arg {
+        "true" => true,
+        _ => false,
+    }
+}
 
 pub fn main() {
     let first_argument = std::env::args().nth(1).expect("missing first argument");
@@ -27,7 +33,13 @@ pub fn main() {
         panic!("unknown file: {}", first_argument);
     }
     let (path_to_rom, config_to_use) = match first_argument.as_str() {
-        _ if first_argument.ends_with(".gb") => { (first_argument, RunConfig::default()) }
+        _ if first_argument.ends_with(".gb") => {
+            let (p, mut r) = (first_argument, RunConfig::default());
+            if let Some(x) = std::env::args().nth(2) {
+                r.print_cpu = arg_to_bool(&x);
+            }
+            (p, r)
+        }
         _ if first_argument.ends_with(".json") => {
             let conf: RunConfig = serde_json::from_str(&read_to_string(path_to_arg).unwrap()).unwrap();
             let path_to_rom = conf.path_to_rom.to_string();

@@ -36,14 +36,11 @@ impl Cpu {
     pub fn adc_a(&mut self, b: u8) {
         let before_a = self.get_a();
         let carry_val = self.get_flag(Flag::C) as u8;
-        
+
         let half_carry = ((before_a & 0x0F) + (b & 0x0F) + (carry_val & 0x0F)) > 0xF;
+        let carry = ((before_a as u16) + (b as u16) + (carry_val as u16)) > 0xFF;
 
         let result = before_a.wrapping_add(b).wrapping_add(carry_val);
-
-        let carry = before_a.checked_add(b).is_none() ||
-            b.checked_add(carry_val).is_none() ||
-            b.checked_add(before_a.wrapping_add(carry_val)).is_none();
 
         self.set_flag(Flag::Z, result == 0);
         self.set_flag(Flag::N, false);
@@ -63,17 +60,22 @@ impl Cpu {
         self.set_flag(Flag::C, borrow);
     }
     pub fn sbc_a(&mut self, b: u8) {
-        let first = self.get_a() as u32;
-        let second = b as u32;
-        let carry = self.get_flag(Flag::C) as u32;
+        let before_a = self.get_a();
+        let carry = self.get_flag(Flag::C) as u8;
 
-        let result = first.wrapping_sub(second).wrapping_sub(carry);
-        let result_b = result as u8;
+        let result = before_a.wrapping_sub(b).wrapping_sub(carry);
 
+        let borrow = (before_a as u16) < (b as u16 + carry as u16);
+        let half_borrow =
+            before_a & 0xF < b & 0xF ||
+                before_a & 0xF < carry ||
+                before_a & 0xF == b & 0xF && carry == 1;
+
+        self.set_a(result);
         self.set_flag(Flag::N, true);
-        self.set_flag(Flag::Z, result_b == 0);
-        self.set_flag(Flag::H, (first ^ second ^ result) & 0x10 == 0x10);
-        self.set_flag(Flag::C, (result & 0x100) == 0x100);
+        self.set_flag(Flag::Z, result == 0);
+        self.set_flag(Flag::H, half_borrow);
+        self.set_flag(Flag::C, borrow);
     }
 
     pub fn add_sp_16_signed(&mut self, val: u8) {
@@ -200,6 +202,12 @@ impl Cpu {
 
     pub fn rst(&mut self, mem: &mut Memory, addr: u16) {
         self.push_sp(mem, self.PC + 1);
+        self.PC = addr;
+        self.IME = false;
+        self.HALT = false;
+    }
+    pub fn rst_interrupt(&mut self, mem: &mut Memory, addr: u16) {
+        self.push_sp(mem, self.PC);
         self.PC = addr;
         self.IME = false;
         self.HALT = false;
