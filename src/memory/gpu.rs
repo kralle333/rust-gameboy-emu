@@ -130,6 +130,7 @@ impl MemoryType for Gpu {
                 0x49 => self.obj_palette1,
                 0x4a => self.window_x,
                 0x4b => self.window_y,
+                0x46 => 0, // DMA
                 _ => panic!("video flags"),
             },
             _ => panic!("video"),
