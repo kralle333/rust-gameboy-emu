@@ -124,8 +124,11 @@ impl MemoryType for Memory {
             0xfea0..=0xfeff => {}
             0xff00 => {
                 //self.joypad = val
-            },
-            0xff01 => self.serial_transfer_data = val,
+            }
+            0xff01 => {
+                self.serial_transfer_data = val;
+                //print!("{}", val)
+            }
             0xff02 => {
                 self.serial_transfer_control = val;
                 // BLARGG
@@ -268,13 +271,13 @@ impl Memory {
                 _ => panic!(),
             };
             while self.timer_value >= timer_threshold {
-                self.timer_value -=timer_threshold;
+                self.timer_value -= timer_threshold;
                 let (counter, overflow) = match self.timer_counter.checked_add(1) {
                     Some(counter) => (counter, false),
                     None => (self.timer_modulo, true),
                 };
                 self.timer_counter = counter;
-                if overflow{
+                if overflow {
                     self.interupt_flag |= 1 << 2;
                 }
             }

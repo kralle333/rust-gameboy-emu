@@ -228,8 +228,8 @@ impl Emulator {
 
         self.cpu.tick(&mut self.memory);
         self.memory.tick(self.cpu.get_clock_t());
-        self.cpu.reset_clock();
         self.step_one = false;
+
         if self.config.print_cpu {
             self.cpu.print();
         }

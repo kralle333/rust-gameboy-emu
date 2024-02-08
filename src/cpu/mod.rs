@@ -268,7 +268,7 @@ impl Cpu {
 
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         self.check_interrupt_status(mem);
-        if self.HALT {
+        if self.HALT  {
             return;
         }
         let opcode = mem.read_byte(self.PC);
@@ -280,6 +280,7 @@ impl Cpu {
         match self.last_instruction {
             Instruction::None => {}
             Instruction::Ok(_, length, clocks, _) => {
+                self.reset_clock();
                 self.add_clock(clocks);
                 if self.operations == self.HALT_bug_at_operation {
                     self.HALT_bug_at_operation = 0;
