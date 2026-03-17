@@ -8,7 +8,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::ops::{Shl, Shr};
 
-use crate::memory::{self, MemoryType};
+use crate::memory::{self, Memory, MemoryType};
 
 #[derive(Default)]
 pub enum Instruction {
@@ -266,24 +266,38 @@ impl Cpu {
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         self.check_interrupt_status(mem);
         if self.HALT {
+            // Time still needs to pass even when halted so timers can tick
+            self.reset_clock();
+            self.add_clock(4);
             return;
         }
+
         let opcode = mem.read_byte(self.PC);
         self.last_regs = self.registers_doctor_str(mem);
+
+        // --- NEW HALT BUG LOGIC ---
+        if self.operations == self.HALT_bug_at_operation {
+            self.HALT_bug_at_operation = 0;
+            // Shift PC back by 1.
+            // This tricks `execute`'s `mem.read_byte(self.PC + 1)` into reading the opcode ITSELF as the first operand!
+            self.PC = self.PC.wrapping_sub(1);
+        }
+        // --------------------------
+
         self.last_instruction = match opcode {
             0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
             _ => self.execute(opcode, mem),
         };
+
         match self.last_instruction {
             Instruction::None => {}
             Instruction::Ok(_, length, clocks, _) => {
                 self.reset_clock();
                 self.add_clock(clocks);
-                if self.operations == self.HALT_bug_at_operation {
-                    self.HALT_bug_at_operation = 0;
-                } else {
-                    self.PC = self.PC.wrapping_add(length);
-                }
+
+                // PC increments normally.
+                // If the halt bug was active, PC started 1 byte lower, so it effectively consumes 1 less byte of memory, matching hardware perfectly.
+                self.PC = self.PC.wrapping_add(length);
             }
             Instruction::Invalid(opcode) => {
                 println!("invalid opcode {}", Self::clean_hex_8(opcode))
@@ -291,29 +305,24 @@ impl Cpu {
         }
         self.operations += 1;
     }
+    fn handle_halt(&mut self, mem: &Memory) {
+        let enabled = mem.read_byte(0xFFFF);
+        let triggered = mem.read_byte(0xFF0F);
+        let to_fire = enabled & triggered & 0x1F;
 
+        if !self.IME && to_fire != 0 {
+            // Halt bug: IME=0, interrupt pending → don't halt, duplicate next byte
+            self.HALT_bug_at_operation = self.operations + 1;
+        } else {
+            // Normal halt or IME=0 with nothing pending
+            self.HALT = true;
+            self.entered_halt_without_IME = !self.IME;
+        }
+    }
     fn check_interrupt_status(&mut self, mem: &mut memory::Memory) {
         self.triggered_interruption = "".to_string();
 
-        let enabled_interrupts = mem.read_byte(0xFFFF);
-        let triggered_interrupts = mem.read_byte(0xFF0F);
-
-        let to_fire = (enabled_interrupts & triggered_interrupts);
-
-        if self.HALT && self.entered_halt_without_IME {
-            if triggered_interrupts != 0 {
-                // HALT bug: IME=0 and IF!=0 → exit HALT but don't fire interrupt
-                self.HALT = false;
-                self.HALT_bug_at_operation = self.operations;
-                return;
-            } else {
-                // True HALT: IME=0 AND IF=0 → stay halted
-                return;
-            }
-        }
-        self.HALT = false;
-
-        //Go through the five different interrupts and see if any is triggered
+        // 1. Handle delayed IME instructions (EI / DI)
         if self.disable_IME_at_operation == self.operations {
             self.disable_IME_at_operation = 0;
             self.IME = false;
@@ -322,10 +331,28 @@ impl Cpu {
             self.enable_IME_at_operation = 0;
             self.IME = true;
         }
-        if !self.IME {
+
+        let enabled_interrupts = mem.read_byte(0xFFFF);
+        let triggered_interrupts = mem.read_byte(0xFF0F);
+        let to_fire = (enabled_interrupts & triggered_interrupts) & 0x1F;
+
+        // 2. Check HALT wake-up condition
+        if self.HALT {
+            if to_fire != 0 {
+                // Wake up! (Regardless of IME status)
+                self.HALT = false;
+            } else {
+                // Stay halted. Do not process interrupts or execute instructions.
+                return;
+            }
+        }
+
+        // 3. Check if we actually service the interrupt by jumping to the ISR
+        if !self.IME || to_fire == 0 {
             return;
         }
 
+        // 4. Service the highest priority interrupt
         for (interrupt, reset_address, interrupt_name) in [
             (0b00001, 0x40, "LCD vertical blanking impulse"),
             (0b00010, 0x48, "LY=LYC"),
@@ -338,17 +365,20 @@ impl Cpu {
             }
 
             self.triggered_interruption = interrupt_name.to_string();
+            // Clear the specific interrupt flag that we are servicing
             mem.write_byte(0xFF0F, triggered_interrupts & !interrupt);
+
             self.rst_interrupt(mem, reset_address);
             self.IME = false;
             self.in_interrupt = true;
+
             if !self.triggered_interruption.is_empty() {
                 println!("Interrupt triggered: {}", self.triggered_interruption);
             }
-            return;
+
+            return; // Only service ONE interrupt per tick
         }
     }
-
     fn clean_hex_8(v: u8) -> String {
         format!("{0:#04X}", v).replace("0x", "")
     }

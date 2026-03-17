@@ -118,11 +118,11 @@ impl Cpu {
             0x1a => {
                 let value = mem.read_byte(self.DE);
                 self.set_a(value);
-                Instruction::Ok(opcode, 1, 8, "LD A, (DE)")
+                Instruction::Ok(opcode, 1, 2, "LD A, (DE)")
             }
             0x1b => {
                 self.DE = self.DE.wrapping_sub(1);
-                Instruction::Ok(opcode, 1, 8, "DEC DE")
+                Instruction::Ok(opcode, 1, 2, "DEC DE")
             }
             0x1c => {
                 self.inc_register(Register::E);
@@ -141,7 +141,7 @@ impl Cpu {
                 self.set_a(a.shr(1) | (self.get_flag(Flag::C) as u8).shl(7));
                 self.reset_all_flags();
                 self.set_flag(Flag::C, (1 & a) != 0);
-                Instruction::Ok(opcode, 1, 4, "RRA")
+                Instruction::Ok(opcode, 1, 1, "RRA")
             }
             0x20 => {
                 if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::Z, false) {
@@ -195,7 +195,7 @@ impl Cpu {
                 self.set_flag(Flag::Z, value == 0);
                 self.set_flag(Flag::H, false);
                 self.set_a(value);
-                Instruction::Ok(opcode, 1, 4, "DAA")
+                Instruction::Ok(opcode, 1, 1, "DAA")
             }
             0x28 => {
                 if self.jump_relative_with_flag(self.get_n(mem) as i8, Flag::Z, true) {
@@ -294,7 +294,7 @@ impl Cpu {
             }
             0x3b => {
                 self.SP = self.SP.wrapping_sub(1);
-                Instruction::Ok(opcode, 1, 8, "DEC SP")
+                Instruction::Ok(opcode, 1, 2, "DEC SP")
             }
             0x3c => {
                 self.inc_register(Register::A);
@@ -312,7 +312,7 @@ impl Cpu {
                 self.set_flag(Flag::N, false);
                 self.set_flag(Flag::H, false);
                 self.set_flag(Flag::C, !self.get_flag(Flag::C));
-                Instruction::Ok(opcode, 1, 4, "CCF")
+                Instruction::Ok(opcode, 1, 1, "CCF")
             }
             0x40 => {
                 self.set_b(self.get_b());
@@ -508,7 +508,7 @@ impl Cpu {
             }
             0x70 => {
                 mem.write_byte(self.HL, self.get_b());
-                Instruction::Ok(opcode, 1, 8, "LD (HL), B")
+                Instruction::Ok(opcode, 1, 4, "LD (HL), B")
             }
             0x71 => {
                 mem.write_byte(self.HL, self.get_c());
@@ -531,17 +531,7 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD (HL), L")
             }
             0x76 => {
-                let enabled_interrupts = mem.read_byte(0xFFFF);
-                let triggered_interrupts = mem.read_byte(0xFF0F);
-
-                let to_fire = enabled_interrupts & triggered_interrupts;
-                if self.IME && to_fire == 0 {
-                    // HALT bug
-                    self.HALT_bug_at_operation = self.operations + 2;
-                } else {
-                    self.HALT = true;
-                    self.entered_halt_without_IME = !self.IME;
-                }
+                self.handle_halt(&mem);
                 Instruction::Ok(opcode, 1, 4, "HALT")
             }
             0x77 => {
@@ -734,7 +724,7 @@ impl Cpu {
             }
             0xa6 => {
                 self.and_a(mem.read_byte(self.HL));
-                Instruction::Ok(opcode, 1, 8, "AND (HL)")
+                Instruction::Ok(opcode, 1, 2, "AND (HL)")
             }
             0xa7 => {
                 self.and_a(self.get_a());
@@ -887,7 +877,7 @@ impl Cpu {
             }
             0xc9 => {
                 self.ret(mem);
-                Instruction::Ok(opcode, 0, 16, "RET")
+                Instruction::Ok(opcode, 0, 4, "RET")
             }
             0xca => {
                 if self.get_flag(Flag::Z) {
@@ -1025,7 +1015,7 @@ impl Cpu {
             }
             0xe9 => {
                 self.PC = self.HL;
-                Instruction::Ok(opcode, 0, 4, "JP (HL)")
+                Instruction::Ok(opcode, 0, 16, "JP (HL)")
             }
             0xea => {
                 let addr = self.get_nn(mem);
@@ -1059,7 +1049,7 @@ impl Cpu {
             }
             0xf3 => {
                 self.disable_IME_at_operation = self.operations + 2;
-                Instruction::Ok(opcode, 1, 4, "DI")
+                Instruction::Ok(opcode, 1, 1, "DI")
             }
             0xf4 => Instruction::Invalid(opcode),
             0xf5 => {
@@ -1092,7 +1082,7 @@ impl Cpu {
             }
             0xfb => {
                 self.enable_IME_at_operation = self.operations + 2;
-                Instruction::Ok(opcode, 1, 4, "EI")
+                Instruction::Ok(opcode, 1, 1, "EI")
             }
             0xfc => Instruction::Invalid(opcode),
             0xfd => Instruction::Invalid(opcode),

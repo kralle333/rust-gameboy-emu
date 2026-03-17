@@ -147,6 +147,15 @@ impl MemoryType for Gpu {
             }
             0xff40..=0xff4b => match addr & 0x00FF {
                 0x40 => {
+                    let was_lcd_on = (self.lcdc & 0x80) != 0;
+                    let is_lcd_on = (val & 0x80) != 0;
+
+                    // Detect if the game is turning the screen OFF
+                    if was_lcd_on && !is_lcd_on {
+                        self.vert_line = 0; // Reset LY
+                        self.lcdc_stat &= !0x03; // Reset mode to 0
+                        self.clock = 0; // Reset PPU clocks
+                    }
                     self.lcdc = val;
                     //println!("lcdc: {val:b}");
                 }
@@ -354,7 +363,7 @@ impl Gpu {
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         if !self.can_draw || !self.lcd_operation() {
-            false;
+            return false;
         }
         self.can_draw = false;
         let scheme = &video::ColorScheme::BlackWhite;
@@ -385,7 +394,7 @@ impl Gpu {
                 return true;
             }
         } else {
-            self.lcdc_stat ^= 1 << 0x4; // LYC not equal to LCDC LY
+            self.lcdc_stat &= !0x4; // LYC not equal to LCDC LY, clear bit 2
         }
         false
     }
@@ -451,7 +460,7 @@ impl Gpu {
     fn get_tile(&self, addr: u16) -> Tile16 {
         let raw_tile = self.vram[addr as usize] as i16;
         if !self.tile_pattern_table_address() && raw_tile < 128 {
-            self.tiles[(raw_tile + 256) as usize];
+            return self.tiles[(raw_tile + 256) as usize];
         }
         self.tiles[raw_tile as usize]
     }
