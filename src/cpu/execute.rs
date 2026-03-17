@@ -531,12 +531,13 @@ impl Cpu {
                 Instruction::Ok(opcode, 1, 8, "LD (HL), L")
             }
             0x76 => {
-                let ie = mem.read_byte(0xFFFF);
-                let if_reg = mem.read_byte(0xFF0F);
+                let enabled_interrupts = mem.read_byte(0xFFFF);
+                let triggered_interrupts = mem.read_byte(0xFF0F);
 
-                // If IME is 0 and (IE & IF) != 0, the bug is triggered for the NEXT operation
-                if !self.IME && (ie & if_reg & 0x1F) != 0 {
-                    self.HALT_bug_at_operation = self.operations + 1;
+                let to_fire = enabled_interrupts & triggered_interrupts;
+                if self.IME && to_fire == 0 {
+                    // HALT bug
+                    self.HALT_bug_at_operation = self.operations + 2;
                 } else {
                     self.HALT = true;
                     self.entered_halt_without_IME = !self.IME;
