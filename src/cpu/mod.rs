@@ -42,7 +42,7 @@ pub struct Cpu {
     triggered_interruption: String,
     last_instruction: Instruction,
     last_regs: String,
-    operations: u128,
+    pub operations: u128,
     doctor_buffer: Vec<String>,
 }
 
@@ -97,6 +97,24 @@ impl Cpu {
             mem.set_out_of_bios();
         }
         self.fetch_decode(mem);
+        // if self.operations == 2_000_000 {
+        //     println!("--- DEADLOCK DETECTED ---");
+        //     println!(
+        //         "PC: {0:#06X} | Opcode: {1:#04X}",
+        //         self.PC(),
+        //         mem.read_byte(self.PC())
+        //     );
+
+        //     // The smoking gun:
+        //     println!(
+        //         "B: {0:02X} | C: {1:02X} | HL: {2:04X}",
+        //         self.get_b(),
+        //         self.get_c(),
+        //         self.HL
+        //     ); // Optional: exit the program here so you can read the log
+
+        //     std::process::exit(0);
+        // }
     }
     pub(crate) fn has_reached_operation_count(&self, p0: u128) -> bool {
         if p0 == 0 {

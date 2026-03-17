@@ -105,6 +105,8 @@ pub struct Gpu {
     show_background: bool,
     show_window: bool,
     show_objects: bool,
+    operations: u128,
+    vram_checked: bool,
 }
 
 impl MemoryType for Gpu {
@@ -171,6 +173,11 @@ impl MemoryType for Gpu {
                     self.vert_line_cp = val;
                 }
                 0x46 => {
+                    let source_addr = (val as u16) << 8;
+                    for i in 0..0xA0 {
+                        let data = self.read_byte(source_addr + i);
+                        self.write_byte(0xFE00 + i, data); // Copy to OAM
+                    }
                     self.dma_write_addr = val;
                 }
                 0x47 => {
@@ -223,6 +230,8 @@ impl Gpu {
             show_background: true,
             show_window: true,
             show_objects: true,
+            operations: 0,
+            vram_checked: false,
         }
     }
 
@@ -380,6 +389,21 @@ impl Gpu {
     }
 
     pub fn tick(&mut self, clock_t: u8) -> u8 {
+        if !self.lcd_operation() {
+            return 0;
+        }
+        self.operations += 1;
+        if !self.vram_checked && self.operations % 100_000 == 0 {
+            let has_graphics = self.get_tiles().iter().any(|tile| {
+                tile.iter()
+                    .any(|row| row.iter().any(|&color| color != GBColor::White))
+            });
+
+            if has_graphics {
+                println!("SUCCESS: VRAM is populated with graphics!");
+                self.vram_checked = true; // Stop checking
+            }
+        }
         let mut interrupts: u8 = 0;
         self.clock += clock_t as u32;
 

@@ -235,7 +235,18 @@ impl Emulator {
         if self.debug_mode == DebugMode::Stepping && !self.step_one {
             return;
         }
+        if self.cpu.operations % 1_000_000 == 0 {
+            let pc = self.cpu.PC();
+            let opcode = self.memory.read_byte(pc);
+            let irq_flag = self.memory.read_byte(0xFF0F);
+            let irq_enable = self.memory.read_byte(0xFFFF);
 
+            // NOTE: If your interrupt master enable flag is named something other than `ime`, change it here
+            println!(
+                "HEARTBEAT | PC: {:#06X} | Opcode: {:#04X} | IME: {} | IF: {:#04X} | IE: {:#04X}",
+                pc, opcode, self.cpu.IME, irq_flag, irq_enable
+            );
+        }
         self.cpu.tick(&mut self.memory);
         self.memory.tick(self.cpu.get_clock_t());
         self.step_one = false;

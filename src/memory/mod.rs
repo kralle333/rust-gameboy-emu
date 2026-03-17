@@ -11,7 +11,7 @@ use sdl2::video::Window;
 
 use crate::{
     cartridge::Cartridge,
-    video::{self, SCREEN_HEIGHT, SCREEN_WIDTH},
+    video::{self, GBColor, SCREEN_HEIGHT, SCREEN_WIDTH},
 };
 
 use self::{gpu::Gpu, rom::Rom, sound::Sound};
@@ -101,6 +101,9 @@ impl MemoryType for Memory {
     }
 
     fn write_byte(&mut self, addr: u16, val: u8) {
+        if addr >= 0x8000 && addr <= 0x97FF && val != 0x00 {
+            // println!("SUCCESS: CPU wrote {:#04X} to VRAM at {:#06X}", val, addr);
+        }
         match addr {
             0x0000..=0x7fff => self.rom.write_byte(addr, val),
             0x8000..=0x9fff => self.gpu.write_byte(addr, val),
@@ -238,6 +241,16 @@ impl Memory {
         if interrupts > 0 {
             self.interupt_flag |= interrupts;
         }
+        // let has_graphics = self.gpu.get_tiles().iter().any(|tile| {
+        //     tile.iter()
+        //         .any(|row| row.iter().any(|&color| color != GBColor::White))
+        // });
+
+        // if has_graphics {
+        //     println!("SUCCESS: VRAM has graphics data!");
+        // } else {
+        //     // println!("FAIL: VRAM is completely empty.");
+        // }
     }
 
     fn is_bit_set(val: u8, bit: u8) -> bool {
