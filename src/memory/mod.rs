@@ -6,7 +6,7 @@ mod sound;
 
 use std::{fs::File, io::Write, ops::Shl};
 
-use sdl2::render::{Canvas, Texture};
+use sdl2::render::Canvas;
 use sdl2::video::Window;
 
 use crate::{
@@ -231,9 +231,7 @@ impl Memory {
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         self.gpu.draw(canvas)
     }
-    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
-        self.gpu.draw_texture(texture)
-    }
+
     pub fn tick(&mut self, clock_t: u8) {
         self.update_timers(clock_t);
         let interrupts = self.gpu.tick(clock_t);
@@ -292,6 +290,7 @@ impl Memory {
         }
     }
 
+    #[allow(unused)]
     pub(crate) fn in_bios(&self) -> bool {
         self.in_bios
     }

@@ -1,6 +1,5 @@
 use super::MemoryType;
 use crate::video::{self, GBColor, SCREEN_HEIGHT, SCREEN_WIDTH};
-use sdl2::render::Texture;
 use sdl2::{rect::Rect, render::Canvas, video::Window};
 
 #[derive(Debug, PartialEq)]
@@ -340,25 +339,6 @@ impl Gpu {
             PaletteType::Object0 => self.object_palette0 = palette,
             PaletteType::Object1 => self.object_palette1 = palette,
         };
-    }
-
-    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
-        if !self.can_draw || !self.lcd_operation() {
-            false;
-        }
-        self.can_draw = false;
-        texture
-            .with_lock(None, |buffer: &mut [u8], _pitch: usize| {
-                let scheme = &video::ColorScheme::BlackWhite;
-                for i in 0..SCREEN_WIDTH * SCREEN_HEIGHT {
-                    let color = video::get_color(&self.pixels[i], scheme);
-                    buffer[i] = color.r;
-                    buffer[i + 1] = color.g;
-                    buffer[i + 2] = color.b;
-                }
-            })
-            .unwrap();
-        true
     }
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {

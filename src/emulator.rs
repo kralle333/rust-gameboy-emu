@@ -1,5 +1,5 @@
 use sdl2::rect::Rect;
-use sdl2::render::{Canvas, Texture};
+use sdl2::render::Canvas;
 use sdl2::video::Window;
 use serde::Deserialize;
 use std::fs;
@@ -91,10 +91,8 @@ impl Emulator {
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         self.memory.draw(canvas)
     }
-    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
-        self.memory.draw_texture(texture)
-    }
 
+    #[allow(unused)]
     pub fn draw_debug(&mut self, canvas: &mut Canvas<Window>) -> bool {
         if !self.draw_tiles {
             return false;
