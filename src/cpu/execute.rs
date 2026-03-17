@@ -537,7 +537,7 @@ impl Cpu {
                 let to_fire = enabled_interrupts & triggered_interrupts;
                 if self.IME && to_fire == 0 {
                     // HALT bug
-                    self.HALT_bug_at_operation = self.operations+2;
+                    self.HALT_bug_at_operation = self.operations + 2;
                 } else {
                     self.HALT = true;
                     self.entered_halt_without_IME = !self.IME;
@@ -887,7 +887,7 @@ impl Cpu {
             }
             0xc9 => {
                 self.ret(mem);
-                return Instruction::Ok(opcode, 0, 4, "RET");
+                Instruction::Ok(opcode, 0, 4, "RET")
             }
             0xca => {
                 if self.get_flag(Flag::Z) {

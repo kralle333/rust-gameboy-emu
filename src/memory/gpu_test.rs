@@ -9,7 +9,7 @@ mod tests {
     fn test_modes() {
         let mut memory = Memory::new();
         memory.reset();
-        assert_eq!(memory.gpu.mode(), TickMode::HBLANK);
+        assert_eq!(memory.gpu.mode(), TickMode::Hblank);
     }
 
     #[test]
@@ -108,6 +108,6 @@ mod tests {
 
     #[test]
     fn test_unsigned_to_tile_index() {
-        let _some_value:u8 = 134;
+        let _some_value: u8 = 134;
     }
 }

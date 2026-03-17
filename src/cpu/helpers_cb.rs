@@ -51,7 +51,7 @@ impl Cpu {
     }
 
     pub fn swap(&mut self, val: u8) -> u8 {
-        let result = (val >> 4) | (val << 4);
+        let result = val.rotate_left(4);
         self.reset_all_flags();
         self.set_flag(Flag::Z, result == 0);
         result
@@ -65,13 +65,13 @@ impl Cpu {
     }
     pub fn bit(&mut self, b: u8, val: u8) {
         self.set_flag(Flag::Z, ((1 << b) & val) == 0);
-        self.set_flag(Flag::N,false);
-        self.set_flag(Flag::H,true);
+        self.set_flag(Flag::N, false);
+        self.set_flag(Flag::H, true);
     }
     pub fn res_bit(&mut self, b: u8, val: u8) -> u8 {
         (!(1 << b)) & val
     }
     pub fn set_bit(&mut self, b: u8, val: u8) -> u8 {
-        ((1 << b)) | val
+        (1 << b) | val
     }
 }

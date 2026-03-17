@@ -33,10 +33,10 @@ impl MemoryType for Rom {
         let addr = addr as usize;
         match addr {
             0x0000..=0x3fff => self.rom[addr],
-            0x4000..=0x7fff => self.rom[(addr & 0x3fff) + self.rom_offset as usize],
+            0x4000..=0x7fff => self.rom[(addr & 0x3fff) + self.rom_offset],
             0xa000..=0xbfff => self.external_ram[(addr & 0x1fff) + self.ram_offset],
             0xc000..=0xdfff => self.internal_ram[addr & 0x1fff],
-            0xe000..=0xfeff => { self.internal_ram[(addr - 0x2000) & 0x1fff] } // echo
+            0xe000..=0xfeff => self.internal_ram[(addr - 0x2000) & 0x1fff], // echo
             0xff00..=0xfffe => self.high_ram[addr & 0x7f],
             _ => panic!("fail"),
         }
@@ -71,13 +71,13 @@ impl Rom {
             high_ram: [0; 0x7f],
             mbc_mode: MbcMode::Invalid,
             ram_enabled: false,
-            log_bank_changes:false,
+            log_bank_changes: false,
         }
     }
     fn write_mbc1(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x1fff => {
-                self.ram_enabled = (val & 0xff) == 0x0a;
+                self.ram_enabled = val == 0x0a;
             }
             0x2000..=0x3fff => {
                 let mut rom_bank = val & 0x3;
@@ -107,12 +107,11 @@ impl Rom {
                 }
             }
             0x6000..=0x7fff => {
-                let new_mode =
-                    if (val & 1) == 0 {
-                        MbcMode::Mbc1_16mbRom8kbRam
-                    } else {
-                        MbcMode::Mbc1_4mbRom32kbRam
-                    };
+                let new_mode = if (val & 1) == 0 {
+                    MbcMode::Mbc1_16mbRom8kbRam
+                } else {
+                    MbcMode::Mbc1_4mbRom32kbRam
+                };
                 if self.mbc_mode != new_mode {
                     if self.log_bank_changes {
                         //println!("switched mbc1 mode: {:?}", new_mode);
@@ -126,7 +125,7 @@ impl Rom {
 
     pub fn load(&mut self, data: &[u8], cartridge_info: &Cartridge) {
         self.rom = vec![0; cartridge_info.rom_size];
-        self.rom.copy_from_slice(&data);
+        self.rom.copy_from_slice(data);
 
         match cartridge_info.cartidge_type {
             CartridgeType::RomOnly => self.mbc_mode = MbcMode::None,

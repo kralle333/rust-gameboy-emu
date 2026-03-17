@@ -46,7 +46,6 @@ pub struct Cpu {
     doctor_buffer: Vec<String>,
 }
 
-
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
 pub enum Register {
@@ -103,7 +102,7 @@ impl Cpu {
         if p0 == 0 {
             return false;
         }
-        return self.operations == p0;
+        self.operations == p0
     }
     pub fn print(&self) {
         if self.HALT {
@@ -126,13 +125,12 @@ impl Cpu {
     }
     pub fn write_buffered_doctor_lines(&mut self) {
         let mut log_file = OpenOptions::new()
-            .write(true)
             .append(true)
             .open("blargg_log_instr.txt")
             .expect("cannot open file");
 
         for x in &self.doctor_buffer {
-            log_file.write(x.as_bytes()).expect("!!!!");
+            log_file.write_all(x.as_bytes()).expect("!!!!");
         }
         self.doctor_buffer.clear();
     }
@@ -244,13 +242,13 @@ impl Cpu {
 
     fn set_flag(&mut self, flag: Flag, val: bool) {
         if val {
-            self.AF = self.AF | (flag as u16);
+            self.AF |= flag as u16;
         } else {
-            self.AF = self.AF & !(flag as u16);
+            self.AF &= !(flag as u16);
         }
     }
     fn reset_all_flags(&mut self) {
-        self.AF = self.AF & 0xff00;
+        self.AF &= 0xff00;
     }
 
     fn get_flag(&self, flag: Flag) -> bool {
@@ -265,14 +263,13 @@ impl Cpu {
         self.clock_t = 0;
     }
 
-
     fn fetch_decode(&mut self, mem: &mut memory::Memory) {
         self.check_interrupt_status(mem);
-        if self.HALT  {
+        if self.HALT {
             return;
         }
         let opcode = mem.read_byte(self.PC);
-        self.last_regs = self.registers_doctor_str(&mem);
+        self.last_regs = self.registers_doctor_str(mem);
         self.last_instruction = match opcode {
             0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
             _ => self.execute(opcode, mem),
@@ -288,7 +285,9 @@ impl Cpu {
                     self.PC = self.PC.wrapping_add(length);
                 }
             }
-            Instruction::Invalid(opcode) => println!("invalid opcode {}", Self::clean_hex_8(opcode)),
+            Instruction::Invalid(opcode) => {
+                println!("invalid opcode {}", Self::clean_hex_8(opcode))
+            }
         }
         self.operations += 1;
     }
@@ -327,7 +326,8 @@ impl Cpu {
             (0b00010, 0x48, "LY=LYC"),
             (0b00100, 0x50, "Timer overflow"),
             (0b01000, 0x58, "End of serial I/O transfer"),
-            (0b10000, 0x60, "Transition High->Low on pins P10-P13")] {
+            (0b10000, 0x60, "Transition High->Low on pins P10-P13"),
+        ] {
             if (interrupt & to_fire) == 0 {
                 continue;
             }
@@ -384,11 +384,13 @@ impl Cpu {
         s = format!("{s} L:{0}", Self::clean_hex_8(self.get_l()));
         s = format!("{s} SP:{0}", Self::clean_hex_16(self.SP));
         s = format!("{s} PC:{0}", Self::clean_hex_16(self.PC));
-        s = format!("{s} PCMEM:{0},{1},{2},{3}",
-                    Self::clean_hex_8(mem.read_byte(self.PC)),
-                    Self::clean_hex_8(mem.read_byte(self.PC + 1)),
-                    Self::clean_hex_8(mem.read_byte(self.PC + 2)),
-                    Self::clean_hex_8(mem.read_byte(self.PC + 3)));
+        s = format!(
+            "{s} PCMEM:{0},{1},{2},{3}",
+            Self::clean_hex_8(mem.read_byte(self.PC)),
+            Self::clean_hex_8(mem.read_byte(self.PC + 1)),
+            Self::clean_hex_8(mem.read_byte(self.PC + 2)),
+            Self::clean_hex_8(mem.read_byte(self.PC + 3))
+        );
         s
     }
 }

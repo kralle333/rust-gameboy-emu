@@ -1,9 +1,9 @@
-use std::fs;
-use std::fs::OpenOptions;
-use sdl2::rect::{Rect};
+use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture};
 use sdl2::video::Window;
 use serde::Deserialize;
+use std::fs;
+use std::fs::OpenOptions;
 
 use crate::cartridge::Cartridge;
 use crate::cpu::Cpu;
@@ -15,7 +15,7 @@ use crate::video::GBColor;
 #[derive(PartialEq)]
 enum DebugMode {
     None,
-    Stepping
+    Stepping,
 }
 
 pub struct Emulator {
@@ -28,6 +28,7 @@ pub struct Emulator {
     draw_tiles: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Default, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RunConfig {
@@ -88,10 +89,10 @@ impl Emulator {
     }
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
-        return self.memory.draw(canvas);
+        self.memory.draw(canvas)
     }
     pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
-        return self.memory.draw_texture(texture);
+        self.memory.draw_texture(texture)
     }
 
     pub fn draw_debug(&mut self, canvas: &mut Canvas<Window>) -> bool {
@@ -100,7 +101,7 @@ impl Emulator {
         }
 
         let bg_tiles = self.memory.dump_tiles();
-        let mut draw_tile = |tile: &[[GBColor; 8]; 8]/* Type */, offset_x, offset_y| {
+        let mut draw_tile = |tile: &[[GBColor; 8]; 8] /* Type */, offset_x, offset_y| {
             for x in 0..8 {
                 for y in 0..8 {
                     let c = video::get_color(
@@ -132,7 +133,7 @@ impl Emulator {
                 y_offset += 8 * video::PIXEL_SIZE as i32;
             }
             let tile_index = tilemap[i] as usize;
-            draw_tile(&bg_tiles[tile_index], x_offset as i32, y_offset as i32);
+            draw_tile(&bg_tiles[tile_index], x_offset, y_offset);
             x_offset += 8 * video::PIXEL_SIZE as i32;
             print!("{},", tile_index);
         }
@@ -159,12 +160,23 @@ impl Emulator {
     fn tick_debug(&mut self) {
         if self.debug_mode == DebugMode::None {
             let mut should_step = false;
-            if self.cpu.has_reached_operation_count(self.config.breakpoint_at_instruction_count) {
+            if self
+                .cpu
+                .has_reached_operation_count(self.config.breakpoint_at_instruction_count)
+            {
                 should_step = true;
-                println!("Stepping: reached breakpoint instruction count {}", self.config.breakpoint_at_instruction_count);
-            } else if self.cpu.PC() == self.config.breakpoint_at_pc && self.config.breakpoint_at_pc != 0 {
+                println!(
+                    "Stepping: reached breakpoint instruction count {}",
+                    self.config.breakpoint_at_instruction_count
+                );
+            } else if self.cpu.PC() == self.config.breakpoint_at_pc
+                && self.config.breakpoint_at_pc != 0
+            {
                 should_step = true;
-                println!("Stepping: reached breakpoint PC {}", self.config.breakpoint_at_pc);
+                println!(
+                    "Stepping: reached breakpoint PC {}",
+                    self.config.breakpoint_at_pc
+                );
             }
             if should_step {
                 self.debug_mode = DebugMode::Stepping;
@@ -234,9 +246,20 @@ impl Emulator {
             self.cpu.print();
         }
         if self.config.print_interrupts {
-            print!("IME: {} IF: {:#04b} IE: {:#04b} ", self.cpu.IME, self.memory.read_byte(0xff0f), self.memory.read_byte(0xffff));
+            print!(
+                "IME: {} IF: {:#04b} IE: {:#04b} ",
+                self.cpu.IME,
+                self.memory.read_byte(0xff0f),
+                self.memory.read_byte(0xffff)
+            );
             let tac = self.memory.read_byte(0xff07);
-            println!("TIMA: {} TMA: {} TimerEnabled: {} ClockSelect: {:#04b}", self.memory.read_byte(0xff05), self.memory.read_byte(0xff06), tac & 4 == 4, tac & 0b11);
+            println!(
+                "TIMA: {} TMA: {} TimerEnabled: {} ClockSelect: {:#04b}",
+                self.memory.read_byte(0xff05),
+                self.memory.read_byte(0xff06),
+                tac & 4 == 4,
+                tac & 0b11
+            );
         }
         if self.config.use_doctor {
             self.cpu.write_doctor();

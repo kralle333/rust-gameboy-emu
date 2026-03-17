@@ -96,13 +96,10 @@ impl Input {
     }
     fn set_button(&mut self, key: Option<Keycode>, is_down: bool) {
         let k = key.unwrap();
-        match self.mapping.get(&k) {
-            Some(b) => {
-                let current = self.key_states.get(b).unwrap();
-                self.prev_key_states.insert(*b,*current);
-                self.key_states.insert(*b, is_down);
-            }
-            None => {}
+        if let Some(b) = self.mapping.get(&k) {
+            let current = self.key_states.get(b).unwrap();
+            self.prev_key_states.insert(*b, *current);
+            self.key_states.insert(*b, is_down);
         }
     }
     fn set_prev_keys(&mut self) {

@@ -2,6 +2,7 @@ use crate::memory::{Memory, MemoryType};
 
 use super::{Cpu, Flag, Register};
 
+#[allow(dead_code)]
 impl Cpu {
     pub fn get_n(&self, mem: &mut Memory) -> u8 {
         mem.read_byte(self.PC + 1)
@@ -66,10 +67,9 @@ impl Cpu {
         let result = before_a.wrapping_sub(b).wrapping_sub(carry);
 
         let borrow = (before_a as u16) < (b as u16 + carry as u16);
-        let half_borrow =
-            before_a & 0xF < b & 0xF ||
-                before_a & 0xF < carry ||
-                before_a & 0xF == b & 0xF && carry == 1;
+        let half_borrow = before_a & 0xF < b & 0xF
+            || before_a & 0xF < carry
+            || before_a & 0xF == b & 0xF && carry == 1;
 
         self.set_a(result);
         self.set_flag(Flag::N, true);
@@ -86,8 +86,14 @@ impl Cpu {
 
         self.set_flag(Flag::Z, false);
         self.set_flag(Flag::N, false);
-        self.set_flag(Flag::H, (sp_as_signed ^ n_as_signed_i32 ^ result) & 0x10 == 0x10);
-        self.set_flag(Flag::C, (sp_as_signed ^ n_as_signed_i32 ^ result) & 0x100 == 0x100);
+        self.set_flag(
+            Flag::H,
+            (sp_as_signed ^ n_as_signed_i32 ^ result) & 0x10 == 0x10,
+        );
+        self.set_flag(
+            Flag::C,
+            (sp_as_signed ^ n_as_signed_i32 ^ result) & 0x100 == 0x100,
+        );
         self.SP = result as u16;
     }
 
@@ -140,14 +146,14 @@ impl Cpu {
     }
     pub fn jump_relative(&mut self, amount: i8) {
         let result = (self.PC + 2).wrapping_add(amount as u16);
-        self.PC = result as u16;
+        self.PC = result;
     }
     pub fn jump_relative_with_flag(&mut self, amount: i8, flag: Flag, flag_set: bool) -> bool {
         if flag_set != self.get_flag(flag) {
             return false;
         }
         self.jump_relative(amount);
-        return true;
+        true
     }
     pub fn borrow_sub(b: u8, a: u8) -> (u8, bool) {
         match b.checked_sub(a) {

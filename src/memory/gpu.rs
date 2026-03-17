@@ -1,28 +1,26 @@
-
-use std::collections::{HashSet};
-use sdl2::{rect::Rect, render::Canvas, video::Window};
 use sdl2::render::Texture;
+use sdl2::{rect::Rect, render::Canvas, video::Window};
+use std::collections::HashSet;
 
 use super::MemoryType;
 use crate::video::{self, GBColor, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 #[derive(Debug, PartialEq)]
 pub enum TickMode {
-    HBLANK = 0b00,
-    VBLANK = 0b01,
-    OAM = 0b10,
-    OAMVRAM = 0b11,
+    Hblank = 0b00,
+    Vblank = 0b01,
+    Oam = 0b10,
+    Oamvram = 0b11,
 }
-
 
 impl TickMode {
     fn from_val(val: u8) -> TickMode {
         match val {
-            0b00 => TickMode::HBLANK,
-            0b01 => TickMode::VBLANK,
-            0b10 => TickMode::OAM,
-            0b11 => TickMode::OAMVRAM,
-            _ => TickMode::HBLANK,
+            0b00 => TickMode::Hblank,
+            0b01 => TickMode::Vblank,
+            0b10 => TickMode::Oam,
+            0b11 => TickMode::Oamvram,
+            _ => TickMode::Hblank,
         }
     }
 }
@@ -105,7 +103,7 @@ pub struct Gpu {
     object_palette0: [GBColor; 4],
     //FF49
     object_palette1: [GBColor; 4],
-    pixels: [GBColor; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
+    pixels: [GBColor; video::SCREEN_WIDTH * video::SCREEN_HEIGHT],
     current_window_line: u8,
     show_background: bool,
     show_window: bool,
@@ -116,14 +114,13 @@ impl MemoryType for Gpu {
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
             0x8000..=0x9fff => self.vram[(addr & 0x1fff) as usize],
-            0xfe00..=0xfea0 => self.oam[(addr & 160) as usize],
-            0xff40..=0xff4b => match addr & 0x00FF {
+            0xfe00..=0xfea0 => self.oam[(addr & 0xFF) as usize],
+            0xff40..=0xff4b => match addr & 0xFF {
                 0x40 => self.lcdc,
                 0x41 => self.lcdc_stat,
                 0x42 => self.scroll_y,
                 0x43 => self.scroll_x,
-                0x44 =>
-                    0x90, // DOCTOR: self.vert_line,
+                0x44 => 0x90, // DOCTOR: self.vert_line,
                 0x45 => self.vert_line_cp,
                 0x47 => self.bg_palette,
                 0x48 => self.obj_palette0,
@@ -211,7 +208,7 @@ impl Gpu {
             obj_palette0: 0,
             obj_palette1: 0,
             dma_write_addr: 0,
-            pixels: [GBColor::White; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT) as usize],
+            pixels: [GBColor::White; (video::SCREEN_WIDTH * video::SCREEN_HEIGHT)],
             background_palette: [GBColor::White; 4],
             object_palette0: [GBColor::White; 4],
             object_palette1: [GBColor::White; 4],
@@ -234,40 +231,40 @@ impl Gpu {
     }
 
     fn is_bit_set(val: u8, bit: u8) -> bool {
-        return (val & (1 << bit)) == (1 << bit);
+        (val & (1 << bit)) == (1 << bit)
     }
 
     pub(crate) fn should_display_background(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 0);
+        Self::is_bit_set(self.lcdc, 0)
     }
     pub(crate) fn use_zero_as_window_solid(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 1);
+        Self::is_bit_set(self.lcdc, 1)
     }
 
     pub(crate) fn use_8x16_sprites(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 2);
+        Self::is_bit_set(self.lcdc, 2)
     }
 
     // 1: 9C00-9FFF 0: 9800-9BFF
     pub(crate) fn background_tile_table_address(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 3);
+        Self::is_bit_set(self.lcdc, 3)
     }
 
     // 1: 8000-8FFF 0: 8800-97FF
     pub(crate) fn tile_pattern_table_address(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 4);
+        Self::is_bit_set(self.lcdc, 4)
     }
     pub(crate) fn should_draw_window(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 5);
+        Self::is_bit_set(self.lcdc, 5)
     }
 
     // 1: 9C00-9FFF 0: 9800-9BFF
     pub(crate) fn window_tile_table_address(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 6);
+        Self::is_bit_set(self.lcdc, 6)
     }
 
     pub(crate) fn lcd_operation(&self) -> bool {
-        return Self::is_bit_set(self.lcdc, 7);
+        Self::is_bit_set(self.lcdc, 7)
     }
 
     pub(crate) fn get_pixel(&self, x: usize, y: usize) -> GBColor {
@@ -338,26 +335,28 @@ impl Gpu {
         };
     }
 
-    pub fn draw_texture(&mut self, texture:  &mut Texture) -> bool {
+    pub fn draw_texture(&mut self, texture: &mut Texture) -> bool {
         if !self.can_draw || !self.lcd_operation() {
-            return false;
+            false;
         }
         self.can_draw = false;
-        texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-            let scheme = &video::ColorScheme::BlackWhite;
-            for i in 0..SCREEN_WIDTH * SCREEN_HEIGHT {
-                let color = video::get_color(&self.pixels[i], scheme);
-                buffer[i] = color.r;
-                buffer[i+1] = color.g;
-                buffer[i+2] = color.b;
-            }
-        }).unwrap();
-        return true;
+        texture
+            .with_lock(None, |buffer: &mut [u8], _pitch: usize| {
+                let scheme = &video::ColorScheme::BlackWhite;
+                for i in 0..SCREEN_WIDTH * SCREEN_HEIGHT {
+                    let color = video::get_color(&self.pixels[i], scheme);
+                    buffer[i] = color.r;
+                    buffer[i + 1] = color.g;
+                    buffer[i + 2] = color.b;
+                }
+            })
+            .unwrap();
+        true
     }
 
     pub fn draw(&mut self, canvas: &mut Canvas<Window>) -> bool {
         if !self.can_draw || !self.lcd_operation() {
-            return false;
+            false;
         }
         self.can_draw = false;
         let scheme = &video::ColorScheme::BlackWhite;
@@ -376,7 +375,7 @@ impl Gpu {
                 Err(_err) => panic!("{_err}"),
             }
         }
-        return true;
+        true
     }
 
     // returns true if LYC=LY interrupt is triggered
@@ -390,7 +389,7 @@ impl Gpu {
         } else {
             self.lcdc_stat ^= 1 << 0x4; // LYC not equal to LCDC LY
         }
-        return false;
+        false
     }
 
     pub fn tick(&mut self, clock_t: u8) -> u8 {
@@ -399,41 +398,41 @@ impl Gpu {
 
         match self.mode() {
             //OAM read
-            TickMode::OAM if self.clock >= 80 => {
-                self.set_mode(TickMode::OAMVRAM);
+            TickMode::Oam if self.clock >= 80 => {
+                self.set_mode(TickMode::Oamvram);
             }
             //OAM and VRAM reading
-            TickMode::OAMVRAM if self.clock >= 172 => {
-                self.set_mode(TickMode::HBLANK);
+            TickMode::Oamvram if self.clock >= 172 => {
+                self.set_mode(TickMode::Hblank);
                 self.render_screen();
             }
             //HBlank
-            TickMode::HBLANK if self.clock >= 204 => {
+            TickMode::Hblank if self.clock >= 204 => {
                 if self.inc_vert_line() {
                     interrupts |= 0x2;
                 }
                 if self.vert_line >= 144 {
-                    self.set_mode(TickMode::VBLANK);
+                    self.set_mode(TickMode::Vblank);
                     self.can_draw = true;
                     interrupts |= 0x1;
                     //WriteTileDataToFile("../tiledata.txt");
                     //WriteTileMapToFile("../tilemap.txt");
                 } else {
-                    self.set_mode(TickMode::OAM);
+                    self.set_mode(TickMode::Oam);
                 }
             }
             //VBlank
-            TickMode::VBLANK if self.clock >= 114 => {
+            TickMode::Vblank if self.clock >= 114 => {
                 if self.inc_vert_line() {
                     interrupts |= 0x2;
                 }
                 self.clock = 0;
                 if self.vert_line >= 153 {
-                    self.set_mode(TickMode::OAM);
+                    self.set_mode(TickMode::Oam);
                     self.vert_line = 0;
                 }
             }
-            TickMode::HBLANK | TickMode::VBLANK | TickMode::OAM | TickMode::OAMVRAM => {}
+            TickMode::Hblank | TickMode::Vblank | TickMode::Oam | TickMode::Oamvram => {}
         }
 
         interrupts
@@ -451,11 +450,10 @@ impl Gpu {
         }
     }
 
-
     fn get_tile(&self, addr: u16) -> Tile16 {
         let raw_tile = self.vram[addr as usize] as i16;
         if !self.tile_pattern_table_address() && raw_tile < 128 {
-            return self.tiles[(raw_tile + 256) as usize];
+            self.tiles[(raw_tile + 256) as usize];
         }
         self.tiles[raw_tile as usize]
     }
@@ -522,7 +520,6 @@ impl Gpu {
         }
         let screen_x = self.window_x - 7;
 
-
         let mut canvasoffs = screen_x as usize + ((self.vert_line as usize) * SCREEN_WIDTH);
 
         let mut tile_x = 0;
@@ -535,8 +532,9 @@ impl Gpu {
         for _ in (screen_x as usize)..SCREEN_WIDTH {
             let pal_color = self.background_palette[bg_tile[tile_y as usize][tile_x] as usize];
 
-            if self.use_zero_as_window_solid() ||
-                (pal_color != GBColor::White && !self.use_zero_as_window_solid()) {
+            if self.use_zero_as_window_solid()
+                || (pal_color != GBColor::White && !self.use_zero_as_window_solid())
+            {
                 self.pixels[canvasoffs] = pal_color;
             }
 
@@ -544,11 +542,11 @@ impl Gpu {
             tile_x += 1;
             if tile_x == 8 {
                 tile_x = 0;
-                line_offset = line_offset + 1;
+                line_offset += 1;
                 bg_tile = self.get_tile(tilemap_addr_start + line_offset);
             }
         }
-        self.current_window_line = self.current_window_line + 1;
+        self.current_window_line += 1;
     }
 
     fn render_objects(&mut self) {
@@ -559,17 +557,14 @@ impl Gpu {
         let cur_line = self.vert_line as i32;
         let height = if use_8x16 { 16 } else { 8 };
 
-        let mut filtered: Vec<&ObjData> = self.objects.iter()
+        let mut filtered: Vec<&ObjData> = self
+            .objects
+            .iter()
             .filter(|&&o| o.x != 0 || o.y != 0)
-            .filter(
-                |&&o|
-                    cur_line >= (o.y as i32 - 16) &&
-                        cur_line < ((o.y as i32 - 16) + height))
+            .filter(|&&o| cur_line >= (o.y as i32 - 16) && cur_line < ((o.y as i32 - 16) + height))
             .collect();
 
-        filtered.sort_by(|a, b| {
-            a.x.cmp(&b.x)
-        });
+        filtered.sort_by(|a, b| a.x.cmp(&b.x));
 
         // Remove sprites that are covered because of a.x == b.x according to obj_index
         let mut covered = HashSet::new();
@@ -586,7 +581,10 @@ impl Gpu {
                 }
             }
         }
-        let covered_filtered: Vec<&&ObjData> = filtered.iter().filter(|&&&o| !covered.contains(&o.obj_index)).collect();
+        let covered_filtered: Vec<&&ObjData> = filtered
+            .iter()
+            .filter(|&&&o| !covered.contains(&o.obj_index))
+            .collect();
 
         for line_x in 0..SCREEN_WIDTH {
             for obj in &covered_filtered {
@@ -594,22 +592,25 @@ impl Gpu {
                 let screen_y = obj.y as i32 - 16;
                 if screen_x <= line_x && screen_x + 7 >= line_x {
                     let x = line_x - screen_x;
-                    let mut sprite_pattern = (if use_8x16 { obj.pattern_num & 0xFE } else { obj.pattern_num }) as usize;
+                    let mut sprite_pattern = (if use_8x16 {
+                        obj.pattern_num & 0xFE
+                    } else {
+                        obj.pattern_num
+                    }) as usize;
                     let y = cur_line - screen_y;
                     let sprite_x = if obj.x_flip { 7 - x } else { x };
                     let mut sprite_y = (if obj.y_flip { (height - 1) - y } else { y }) as usize;
 
                     let palette = match obj.pal_num {
                         false => self.object_palette0,
-                        true => self.object_palette1
+                        true => self.object_palette1,
                     };
                     if sprite_y >= 8 {
                         sprite_y -= 8;
                         sprite_pattern += 1;
                     }
-                    let pal_color = palette
-                        [self.tiles
-                        [sprite_pattern][sprite_y][sprite_x] as usize];
+                    let pal_color =
+                        palette[self.tiles[sprite_pattern][sprite_y][sprite_x] as usize];
 
                     if pal_color == GBColor::White {
                         continue;
@@ -642,6 +643,6 @@ impl Gpu {
                 map[i] = raw_tile as u8;
             }
         }
-        return map;
+        map
     }
 }

@@ -14,10 +14,10 @@ impl CartridgeType {
     fn from_u32(val: u32) -> CartridgeType {
         match val {
             0x0 | 0x8 | 0x9 => CartridgeType::RomOnly,
-            0x1 | 0x2 | 0x3 => CartridgeType::Mbc1,
+            0x1..=0x3 => CartridgeType::Mbc1,
             0x5 | 0x6 => CartridgeType::Mbc2,
-            0xF | 0x12 | 0x13 | 0x10 | 0x11 => CartridgeType::Mbc3,
-            0x19 | 0x1A | 0x1B | 0x1C | 0x1D | 0x1E => CartridgeType::Mbc5,
+            0xF..=0x13 => CartridgeType::Mbc3,
+            0x19..=0x1E => CartridgeType::Mbc5,
             _ => CartridgeType::Invalid,
         }
     }
@@ -30,7 +30,7 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn new(data: &Vec<u8>) -> Self {
+    pub fn new(data: &[u8]) -> Self {
         let mut cartridge = Cartridge {
             cartidge_type: CartridgeType::Invalid,
             rom_size: 0,
