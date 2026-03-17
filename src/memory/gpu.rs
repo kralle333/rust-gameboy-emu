@@ -1,9 +1,7 @@
-use sdl2::render::Texture;
-use sdl2::{rect::Rect, render::Canvas, video::Window};
-use std::collections::HashSet;
-
 use super::MemoryType;
 use crate::video::{self, GBColor, SCREEN_HEIGHT, SCREEN_WIDTH};
+use sdl2::render::Texture;
+use sdl2::{rect::Rect, render::Canvas, video::Window};
 
 #[derive(Debug, PartialEq)]
 pub enum TickMode {
@@ -564,61 +562,78 @@ impl Gpu {
             .filter(|&&o| cur_line >= (o.y as i32 - 16) && cur_line < ((o.y as i32 - 16) + height))
             .collect();
 
-        filtered.sort_by(|a, b| a.x.cmp(&b.x));
+        // 1. First, sort the sprites properly
+        // Lower X coordinate has priority. If X is equal, lower OAM index has priority.
 
-        // Remove sprites that are covered because of a.x == b.x according to obj_index
-        let mut covered = HashSet::new();
-        for i in 0..filtered.len() {
-            if covered.contains(&filtered[i].obj_index) {
-                continue;
-            }
-            for j in i + 1..filtered.len() {
-                if covered.contains(&filtered[j].obj_index) {
-                    continue;
-                }
-                if filtered[i].x == filtered[j].x && filtered[i].obj_index < filtered[j].obj_index {
-                    covered.insert(filtered[j].obj_index);
-                }
-            }
-        }
-        let covered_filtered: Vec<&&ObjData> = filtered
-            .iter()
-            .filter(|&&&o| !covered.contains(&o.obj_index))
-            .collect();
+        filtered.sort_by(|a, b| match a.x.cmp(&b.x) {
+            std::cmp::Ordering::Equal => a.obj_index.cmp(&b.obj_index),
 
+            other => other,
+        });
+
+        // 2. Iterate directly over the sorted filtered array
         for line_x in 0..SCREEN_WIDTH {
-            for obj in &covered_filtered {
-                let screen_x = (obj.x as i32 - 8) as usize;
+            for obj in &filtered {
+                // Keep screen positions as i32 to allow for negative values (left/top clipping)
+
+                let screen_x = obj.x as i32 - 8;
+
                 let screen_y = obj.y as i32 - 16;
-                if screen_x <= line_x && screen_x + 7 >= line_x {
-                    let x = line_x - screen_x;
+
+                // Safely check bounds using i32 comparisons
+
+                if screen_x <= line_x as i32 && screen_x + 7 >= line_x as i32 {
+                    // Calculate which pixel of the 8x8 (or 8x16) sprite we are drawing
+
+                    let x = (line_x as i32 - screen_x) as usize;
+
+                    let y = cur_line - screen_y;
+
                     let mut sprite_pattern = (if use_8x16 {
                         obj.pattern_num & 0xFE
                     } else {
                         obj.pattern_num
                     }) as usize;
-                    let y = cur_line - screen_y;
+
                     let sprite_x = if obj.x_flip { 7 - x } else { x };
                     let mut sprite_y = (if obj.y_flip { (height - 1) - y } else { y }) as usize;
 
                     let palette = match obj.pal_num {
                         false => self.object_palette0,
+
                         true => self.object_palette1,
                     };
+
+                    // Handle bottom half of 8x16 sprites
                     if sprite_y >= 8 {
                         sprite_y -= 8;
+
                         sprite_pattern += 1;
                     }
-                    let pal_color =
-                        palette[self.tiles[sprite_pattern][sprite_y][sprite_x] as usize];
 
-                    if pal_color == GBColor::White {
+                    // CRITICAL: Get the raw 2-bit color index first!
+                    let color_index = self.tiles[sprite_pattern][sprite_y][sprite_x] as usize;
+
+                    // If the raw index is 0, it's transparent. Skip drawing this pixel.
+                    if color_index == 0 {
                         continue;
                     }
-                    let pos = (screen_x + x) + (screen_y + y) as usize * SCREEN_WIDTH;
-                    if !obj.priority || (obj.priority && self.pixels[pos] == GBColor::White) {
+
+                    // Map the raw index to the actual palette color
+                    let pal_color = palette[color_index];
+
+                    // Calculate the exact pixel position in the 1D array using the screen coordinates
+                    let pos = line_x + (cur_line as usize) * SCREEN_WIDTH;
+
+                    // Priority handling:
+                    // If obj.priority is true, the sprite only renders over Background Color 0.
+                    // Using self.background_palette[0] is more accurate to hardware than GBColor::White
+                    if !obj.priority || self.pixels[pos] == self.background_palette[0] {
                         self.pixels[pos] = pal_color;
                     }
+
+                    // We drew the highest priority sprite for this pixel, break out to the next line_x
+
                     break;
                 }
             }
