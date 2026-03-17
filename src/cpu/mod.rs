@@ -273,7 +273,7 @@ impl Cpu {
         }
 
         let opcode = mem.read_byte(self.PC);
-        self.last_regs = self.registers_doctor_str(mem);
+        // self.last_regs = self.registers_doctor_str(mem);
 
         // --- NEW HALT BUG LOGIC ---
         if self.operations == self.HALT_bug_at_operation {
@@ -373,7 +373,7 @@ impl Cpu {
             self.in_interrupt = true;
 
             if !self.triggered_interruption.is_empty() {
-                println!("Interrupt triggered: {}", self.triggered_interruption);
+                // println!("Interrupt triggered: {}", self.triggered_interruption);
             }
 
             return; // Only service ONE interrupt per tick
