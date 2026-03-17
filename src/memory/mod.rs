@@ -16,8 +16,6 @@ use crate::{
 
 use self::{gpu::Gpu, rom::Rom, sound::Sound};
 
-const CLOCK_SPEED: u32 = 4194304;
-
 pub trait MemoryType {
     fn read_byte(&self, addr: u16) -> u8;
     fn write_byte(&mut self, addr: u16, val: u8);
@@ -51,7 +49,7 @@ pub struct Memory {
     //FF02
     serial_transfer_control: u8,
     //FF04
-    div_register: u8,
+    div_register: u16,
     //FF05
     timer_counter: u8,
     //FF06
@@ -59,8 +57,7 @@ pub struct Memory {
     //FF07
     timer_control: u8,
 
-    // Used to increment FF05 at FF06 frequency
-    timer_value: u32,
+    timer_and_gate_previous: bool,
 }
 
 impl MemoryType for Memory {
@@ -83,7 +80,7 @@ impl MemoryType for Memory {
             0xff00 => self.joypad,
             0xff01 => self.serial_transfer_data,
             0xff02 => self.serial_transfer_control,
-            0xff04 => self.div_register,
+            0xff04 => (self.div_register >> 8) as u8,
             0xff05 => self.timer_counter,
             0xff06 => self.timer_modulo,
             0xff07 => self.timer_control,
@@ -106,19 +103,7 @@ impl MemoryType for Memory {
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x7fff => self.rom.write_byte(addr, val),
-            0x8000..=0x9fff => {
-                if addr == 0xff46 {
-                    // DMA transfer
-                    let start = (val as u16) << 8;
-                    for i in 0..140u16 {
-                        let from_addr = start + i;
-                        let to_addr = 0xfe00 + i;
-                        self.write_byte(to_addr, self.read_byte(from_addr));
-                    }
-                    return;
-                }
-                self.gpu.write_byte(addr, val);
-            }
+            0x8000..=0x9fff => self.gpu.write_byte(addr, val),
             0xa000..=0xfdff => self.rom.write_byte(addr, val),
             0xfe00..=0xfe9f => self.gpu.write_byte(addr, val),
             0xfea0..=0xfeff => {}
@@ -143,6 +128,15 @@ impl MemoryType for Memory {
             0xff07 => self.timer_control = val,
             0xff0f => self.interupt_flag = val,
             0xff10..=0xff3f => self.snd.write_byte(addr, val),
+            0xff46 => {
+                // DMA transfer
+                let start = (val as u16) << 8;
+                for i in 0..140u16 {
+                    let from_addr = start + i;
+                    let to_addr = 0xfe00 + i;
+                    self.write_byte(to_addr, self.read_byte(from_addr));
+                }
+            }
             0xff40..=0xff4b => self.gpu.write_byte(addr, val),
             0xff4c..=0xff7f => {}
             0xff80..=0xfffe => self.rom.write_byte(addr, val),
@@ -189,7 +183,7 @@ impl Memory {
             timer_counter: 0,
             timer_modulo: 0,
             timer_control: 0,
-            timer_value: 0,
+            timer_and_gate_previous: false,
         };
         mem.reset();
         mem
@@ -248,43 +242,45 @@ impl Memory {
         }
     }
 
-    fn add_to_div(&mut self, amount: u8) {
-        let (new_value, div_overflow) = self.div_register.overflowing_add(amount);
-        if div_overflow {
-            self.div_register = 0;
-            let prev = self.read_byte(0xFF04);
-            self.write_byte(0xFF04, prev.wrapping_add(1));
-        } else {
-            self.div_register = new_value;
-        }
-    }
     fn is_bit_set(val: u8, bit: u8) -> bool {
         (val & (1 << bit)) == (1 << bit)
     }
     pub fn update_timers(&mut self, clock_t: u8) {
-        self.add_to_div(clock_t);
+        for _ in 0..clock_t {
+            // 1. Advance the single master 16-bit counter (make sure div_register is a u16!)
+            self.div_register = self.div_register.wrapping_add(1);
 
-        if Self::is_bit_set(self.timer_control, 2) {
-            self.timer_value += clock_t as u32;
-            let timer_threshold = match self.timer_control & 0b11 {
-                0b00 => CLOCK_SPEED / 4096,   //  4.096 KHz
-                0b01 => CLOCK_SPEED / 262144, //  262.144 Khz
-                0b10 => CLOCK_SPEED / 65536,  //  65.536 KHz
-                0b11 => CLOCK_SPEED / 16384,  //  16.384 KHz
-                _ => panic!(),
+            // 2. Select the correct bit from the 16-bit counter based on TAC
+            let bit_position = match self.timer_control & 0b11 {
+                0b00 => 9,
+                0b01 => 3,
+                0b10 => 5,
+                0b11 => 7,
+                _ => unreachable!(),
             };
-            while self.timer_value >= timer_threshold {
-                self.timer_value -= timer_threshold;
-                let (counter, overflow) = match self.timer_counter.checked_add(1) {
-                    Some(counter) => (counter, false),
-                    None => (self.timer_modulo, true),
-                };
-                self.timer_counter = counter;
+
+            // 3. Extract the bit and the enable flag
+            let timer_bit = (self.div_register & (1 << bit_position)) != 0;
+            let timer_enabled = Self::is_bit_set(self.timer_control, 2);
+
+            // 4. Run it through the AND gate
+            let current_and_gate = timer_bit && timer_enabled;
+
+            // 5. Detect the Falling Edge (1 -> 0 transition)
+            if self.timer_and_gate_previous && !current_and_gate {
+                let (counter, overflow) = self.timer_counter.overflowing_add(1);
+
                 if overflow {
-                    self.interupt_flag |= 1 << 2;
+                    self.timer_counter = self.timer_modulo; // Reload TMA
+                    self.interupt_flag |= 1 << 2; // Request Timer Interrupt
+                } else {
+                    self.timer_counter = counter;
                 }
             }
-        };
+
+            // 6. Save the state for the next cycle
+            self.timer_and_gate_previous = current_and_gate;
+        }
     }
 
     fn color_to_char(color: &video::GBColor) -> String {

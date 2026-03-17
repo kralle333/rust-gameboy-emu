@@ -12,7 +12,7 @@ enum MbcMode {
 
 pub struct Rom {
     rom: Vec<u8>,
-    external_ram: [u8; 0x2000],
+    external_ram: [u8; 0x8000],
     internal_ram: [u8; 0x2000],
     high_ram: [u8; 0x7f],
 
@@ -34,7 +34,13 @@ impl MemoryType for Rom {
         match addr {
             0x0000..=0x3fff => self.rom[addr],
             0x4000..=0x7fff => self.rom[(addr & 0x3fff) + self.rom_offset],
-            0xa000..=0xbfff => self.external_ram[(addr & 0x1fff) + self.ram_offset],
+            0xa000..=0xbfff => {
+                if self.ram_enabled {
+                    self.external_ram[(addr & 0x1fff) + self.ram_offset]
+                } else {
+                    0xFF
+                }
+            }
             0xc000..=0xdfff => self.internal_ram[addr & 0x1fff],
             0xe000..=0xfeff => self.internal_ram[(addr - 0x2000) & 0x1fff], // echo
             0xff00..=0xfffe => self.high_ram[addr & 0x7f],
@@ -51,7 +57,11 @@ impl MemoryType for Rom {
                 }
                 MbcMode::Invalid => todo!(),
             },
-            0xa000..=0xbfff => self.external_ram[(addr & 0x1fff) as usize + self.ram_offset] = val,
+            0xa000..=0xbfff => {
+                if self.ram_enabled {
+                    self.external_ram[(addr & 0x1fff) as usize + self.ram_offset] = val
+                }
+            }
             0xc000..=0xdfff => self.internal_ram[addr as usize & 0x1fff] = val,
             0xe000..=0xfdff => self.internal_ram[(addr as usize - 0x2000) & 0x1fff] = val, // echo
             0xff00..=0xfffe => self.high_ram[addr as usize & 0x7f] = val,
@@ -67,7 +77,7 @@ impl Rom {
             rom_offset: 0x4000,
             ram_offset: 0,
             internal_ram: [0; 0x2000],
-            external_ram: [0; 0x2000],
+            external_ram: [0; 0x8000],
             high_ram: [0; 0x7f],
             mbc_mode: MbcMode::Invalid,
             ram_enabled: false,
@@ -77,10 +87,10 @@ impl Rom {
     fn write_mbc1(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x1fff => {
-                self.ram_enabled = val == 0x0a;
+                self.ram_enabled = (val & 0x0F) == 0x0A;
             }
             0x2000..=0x3fff => {
-                let mut rom_bank = val & 0x3;
+                let mut rom_bank = val & 0x1F;
                 if rom_bank == 0 {
                     rom_bank = 1;
                 }

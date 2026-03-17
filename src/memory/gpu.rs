@@ -420,7 +420,7 @@ impl Gpu {
                 }
             }
             //VBlank
-            TickMode::Vblank if self.clock >= 114 => {
+            TickMode::Vblank if self.clock >= 456 => {
                 if self.inc_vert_line() {
                     interrupts |= 0x2;
                 }

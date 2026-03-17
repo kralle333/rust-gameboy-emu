@@ -268,26 +268,47 @@ impl Cpu {
         if self.HALT {
             return;
         }
+
         let opcode = mem.read_byte(self.PC);
+
+        // 1. Handle the HALT bug: If active, don't increment PC after fetching the opcode byte.
+        let pc_before_fetch = self.PC;
+        if self.HALT_bug_at_operation != 0 && self.operations == self.HALT_bug_at_operation {
+            self.HALT_bug_at_operation = 0; // Triggered! PC stays at current opcode
+        } else {
+            self.PC = self.PC.wrapping_add(1);
+        }
+
         self.last_regs = self.registers_doctor_str(mem);
         self.last_instruction = match opcode {
-            0xcb => self.execute_cb(mem.read_byte(self.PC.wrapping_add(1)), mem),
+            0xcb => {
+                let cb_op = mem.read_byte(self.PC);
+                self.PC = self.PC.wrapping_add(1);
+                self.execute_cb(cb_op, mem)
+            }
             _ => self.execute(opcode, mem),
         };
+
         match self.last_instruction {
-            Instruction::None => {}
-            Instruction::Ok(_, length, clocks, _) => {
+            Instruction::Ok(_, length, clocks_t, _) => {
                 self.reset_clock();
-                self.add_clock(clocks);
-                if self.operations == self.HALT_bug_at_operation {
-                    self.HALT_bug_at_operation = 0;
-                } else {
-                    self.PC = self.PC.wrapping_add(length);
-                }
+                self.add_clock(clocks_t);
+
+                // 2. Adjust PC for the REST of the instruction length.
+                // Since we already incremented by 1 (or 0 if bugged),
+                // we increment by (length - 1).
+                self.PC = pc_before_fetch.wrapping_add(
+                    if self.HALT_bug_at_operation == 0 && pc_before_fetch == self.PC {
+                        length.saturating_sub(1)
+                    } else {
+                        length
+                    },
+                );
+
+                // Note: If your execute() calls get_n(), it ALREADY moved PC.
+                // Ensure length - 1 doesn't over-jump.
             }
-            Instruction::Invalid(opcode) => {
-                println!("invalid opcode {}", Self::clean_hex_8(opcode))
-            }
+            _ => {}
         }
         self.operations += 1;
     }
@@ -298,15 +319,20 @@ impl Cpu {
         let enabled_interrupts = mem.read_byte(0xFFFF);
         let triggered_interrupts = mem.read_byte(0xFF0F);
 
-        let to_fire = enabled_interrupts & triggered_interrupts;
+        let to_fire = (enabled_interrupts & triggered_interrupts);
 
         if self.HALT && self.entered_halt_without_IME {
-            if to_fire != 0 {
+            if triggered_interrupts & 0x1F != 0 {
+                // HALT bug: IME=0 and IF!=0 → exit HALT but don't fire interrupt
                 self.HALT = false;
+                self.HALT_bug_at_operation = self.operations;
                 return;
-            } else { // HALT bug
+            } else {
+                // True HALT: IME=0 AND IF=0 → stay halted
+                return;
             }
         }
+        self.HALT = false;
 
         //Go through the five different interrupts and see if any is triggered
         if self.disable_IME_at_operation == self.operations {
